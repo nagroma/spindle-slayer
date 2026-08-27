@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Legacy 1200 - spindle preview</title>
+  <meta name="lomp-save" content="browser-save-as-v6" />
+  <style>
+    :root {
+      --bg: #1c1b19;
+      --panel: #232120;
+      --line: #3a3733;
+      --ink: #ece6da;
+      --muted: #a49c8e;
+      --accent: #c98a4b;
+      --wood: #c99a5f;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+    header .file-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+    header .project-name { font-size: 12px; color: var(--muted); max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .toolbar {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .stock-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 0 0 auto;
+    }
+    label.field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .stock-fields .field {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+    }
+    .stock-fields .field > span { width: 4.6rem; flex: 0 0 auto; }
+    input, select {
+      background: #151412;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      width: 7.5rem;
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    button.ghost:hover { color: var(--ink); }
+    button.danger {
+      background: transparent;
+      color: #c97a6a;
+      border: 1px solid #5a3a33;
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .bits {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-content: flex-start;
+      flex: 1;
+      min-width: 0;
+    }
+    button.bit {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #151412;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 3px 8px 3px 4px;
+      cursor: pointer;
+      text-align: left;
+      width: auto;
+    }
+    button.bit:hover { border-color: var(--accent); }
+    button.bit .nm { font-size: 12px; white-space: nowrap; }
+    .bit-icon { flex: 0 0 auto; background: #101110; border-radius: 4px; }
+    .bit-icon path { fill: #4a7ea8; fill-opacity: 0.75; stroke: #7eb0d4; stroke-width: 0.03; }
+    .workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .splitter {
+      flex: 0 0 7px;
+      background: #2a2724;
+      cursor: col-resize;
+      position: relative;
+    }
+    .splitter::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 2px;
+      width: 3px;
+      height: 32px;
+      margin-top: -16px;
+      border-radius: 2px;
+      background: #5a5348;
+    }
+    .splitter:hover, .splitter.dragging { background: var(--accent); }
+    .splitter:hover::after, .splitter.dragging::after { background: #f0c48a; }
+    .pane-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 8px 10px 4px;
+    }
+    .cuts-pane { background: var(--panel); overflow: hidden; }
+    .placed { padding: 0 10px 8px; overflow: auto; flex: 1; min-height: 0; }
+    .placed-item {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+      background: #151412;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .placed-item.selected { border-color: var(--accent); color: var(--accent); }
+    .placed-item.dragging { opacity: 0.45; }
+    .placed-item.drag-over { border-color: var(--accent); background: #2a241c; }
+    .placed-num {
+      flex: 0 0 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      cursor: grab;
+      user-select: none;
+    }
+    .placed-item.selected .placed-num { color: var(--accent); }
+    .placed-main {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      background: transparent;
+      color: inherit;
+      border: 0;
+      padding: 5px 6px 5px 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .placed-item .meta { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; font-family: ui-monospace, monospace; }
+    .placed-ord {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 1.5rem;
+      border-left: 1px solid var(--line);
+    }
+    .placed-ord button {
+      flex: 1;
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      font-size: 10px;
+      line-height: 1;
+    }
+    .placed-ord button:hover:not(:disabled) { color: var(--ink); background: #1c1a18; }
+    .placed-ord button:disabled { opacity: 0.25; cursor: default; }
+    .placed-item.cut-hidden { opacity: 0.45; }
+    .placed-tools {
+      display: flex;
+      flex-direction: column;
+      flex: 0 0 1.5rem;
+      border-left: 1px solid var(--line);
+    }
+    .placed-tools button {
+      flex: 1;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .placed-del { color: #c97a6a; font-size: 16px; line-height: 1; }
+    .placed-del:hover { background: #2a1c1a; color: #e8a090; }
+    .placed-hide { color: var(--muted); }
+    .placed-hide:hover { background: #1c1a18; color: var(--ink); }
+    .placed-hide svg { display: block; }
+    .placed-item.cut-hidden .placed-hide { color: var(--accent); }
+    .place-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      min-width: 0;
+    }
+    .place-fields input { width: 100%; min-width: 0; }
+    .place-fields .row { display: flex; gap: 6px; min-width: 0; }
+    .cut-actions {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      min-width: 0;
+    }
+    .history-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 0 0 auto;
+    }
+    .history-btns button {
+      font-size: 10px;
+      padding: 2px 7px;
+      line-height: 1.2;
+      flex: none;
+      width: auto;
+    }
+    .cut-actions #btnDelete,
+    .delete-stack #btnDelete {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .delete-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .place-fields .check {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 12px;
+    }
+    .place-fields .check input { width: auto; }
+    #runFields[hidden] { display: none; }
+    .view-tools {
+      display: flex;
+      gap: 6px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .view-tools button#btnZoomIn,
+    .view-tools button#btnZoomOut { min-width: 2rem; padding-left: 0; padding-right: 0; font-size: 16px; }
+    #side-wrap, #three-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    #side-wrap svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+    }
+    #side-wrap svg.panning { cursor: grabbing; }
+    #side-wrap svg .bg { fill: #151412; }
+    #side-wrap svg .stock-ghost {
+      fill: none; stroke: #5a5348;
+      stroke-width: 1; stroke-dasharray: 5 4;
+      vector-effect: non-scaling-stroke;
+    }
+    #side-wrap svg .remaining { fill: #c99a5f; fill-opacity: 0.92; stroke: #8a6a3a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+    #side-wrap svg .centerline {
+      stroke: #ece6da; stroke-width: 1; stroke-dasharray: 5 4;
+      vector-effect: non-scaling-stroke;
+    }
+    #side-wrap svg .bit { fill: #4a7ea8; fill-opacity: 0.45; stroke: #7eb0d4; stroke-width: 1.5; cursor: grab; vector-effect: non-scaling-stroke; }
+    #side-wrap svg .bit.selected { fill: #c98a4b; fill-opacity: 0.5; stroke: #f0c48a; }
+    #side-wrap svg .bit-smear { fill: #4a7ea8; fill-opacity: 0.16; stroke: none; pointer-events: none; }
+    #side-wrap svg .bit-smear.selected { fill: #c98a4b; fill-opacity: 0.2; }
+    #side-wrap svg .bit-tip { fill: #ece6da; pointer-events: auto; cursor: grab; }
+    #side-wrap svg .bit-tip.selected { fill: #fff; }
+    #side-wrap svg .bit-end { fill: #4a7ea8; fill-opacity: 0.22; stroke: #7eb0d4; stroke-width: 1.5; stroke-dasharray: 4 3; cursor: grab; vector-effect: non-scaling-stroke; }
+    #side-wrap svg .bit-end.selected { fill: #c98a4b; fill-opacity: 0.28; stroke: #f0c48a; }
+    #side-wrap svg .bit-tip-end { fill: #ece6da; fill-opacity: 0.9; pointer-events: auto; cursor: grab; }
+    #side-wrap svg .bit-tip-end.selected { fill: #fff; }
+    #three-wrap { background: #101110; }
+    #three-wrap canvas { display: block; width: 100%; height: 100%; }
+    .hint {
+      position: absolute;
+      bottom: 8px;
+      right: 10px;
+      font-size: 11px;
+      color: #6a655c;
+      font-family: ui-monospace, monospace;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Legacy 1200 - spindle preview</h1>
+    <div class="file-actions">
+      <span class="project-name" id="projectName"></span>
+      <button class="ghost" id="btnOpen" type="button">Open</button>
+      <button class="ghost" id="btnSaveLomp" type="button">Save</button>
+    </div>
+  </header>
+  <div class="toolbar">
+    <div class="stock-fields">
+      <label class="field"><span>Stock</span>
+        <select id="stockType">
+          <option value="square">Square</option>
+          <option value="round">Round</option>
+          <option value="hex">Hex (across flats)</option>
+        </select>
+      </label>
+      <label class="field"><span>Length (in)</span>
+        <input id="stockLength" type="number" min="4" max="80" step="0.5" />
+      </label>
+      <label class="field"><span id="sizeKind">Side (in)</span>
+        <input id="stockSize" type="number" min="0.5" max="12" step="0.125" />
+      </label>
+    </div>
+    <div class="bits" id="bitPalette"></div>
+  </div>
+  <div class="workspace" id="workspace">
+    <aside class="pane cuts-pane" id="paneCuts">
+      <div class="pane-label">Cuts on this blank</div>
+      <div class="place-fields" id="placeFields">
+        <label class="field">From headstock (in)
+          <input id="placeLength" type="number" min="0" step="0.01" />
+        </label>
+        <label class="field">Diameter at tip (in)
+          <input id="placeDia" type="number" min="0.04" step="0.01" />
+        </label>
+        <label class="field check"><input id="placeRun" type="checkbox" /> Run / taper</label>
+        <div id="runFields" hidden>
+          <label class="field">End from headstock (in)
+            <input id="placeEndLength" type="number" min="0" step="0.01" />
+          </label>
+          <label class="field">End diameter at tip (in)
+            <input id="placeEndDia" type="number" min="0.04" step="0.01" />
+          </label>
+        </div>
+        <div class="cut-actions">
+          <span class="history-btns">
+            <button class="ghost" id="btnUndo" type="button" title="Undo (Ctrl+Z)">Undo</button>
+            <button class="ghost" id="btnRedo" type="button" title="Redo (Ctrl+Y)">Redo</button>
+          </span>
+          <span class="delete-stack">
+            <button class="danger" id="btnDelete" type="button">Remove cut</button>
+          </span>
+        </div>
+      </div>
+      <div class="placed" id="placedList"></div>
+    </aside>
+    <div class="splitter" id="splitCuts" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+    <section class="pane" id="paneSide">
+      <div class="pane-label">Profile vs centerline</div>
+      <div class="view-tools">
+        <button class="ghost" id="btnZoomIn" type="button" title="Zoom in">+</button>
+        <button class="ghost" id="btnZoomOut" type="button" title="Zoom out">−</button>
+        <button class="ghost" id="btnFit" type="button">Fit 2D</button>
+      </div>
+      <div id="side-wrap"><span class="hint">wheel zoom · shift+wheel scroll · drag up/down</span></div>
+    </section>
+    <div class="splitter" id="splitSide" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
+    <section class="pane" id="paneThree">
+      <div class="pane-label">3D remaining wood</div>
+      <div id="three-wrap"><span class="hint">drag to orbit · left-right spins · drag up/down to flip</span></div>
+    </section>
+  </div>
+  <input id="fileOpen" type="file" accept=".lomp,.json,.txt,text/plain" hidden />
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

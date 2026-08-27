@@ -1,0 +1,45 @@
+---
+description: Legacy 1200 planner — working agreement and agent conventions
+alwaysApply: true
+---
+
+# Agent notes (this repo)
+
+LLM-focused knowledge: **this file** + `requirements.md`. Not `README.md`.
+
+## Follow
+
+- `requirements.md` — working agreement. Ask before changing a **hard** requirement. Update **directional** lines when we implement a change.
+- `NEXT-SESSION.md` — agreed next work. Keep it short.
+- `README.md` — humans + product backlog.
+
+## “What’s next”
+
+When asked what’s next (new chat or same chat):
+
+1. Read `NEXT-SESSION.md`. If it names work, that is first.
+2. If it is empty, or he does not want that item, suggest the next few **backlog** items from `README.md` that look like quick wins or high impact. Do not start them until he picks.
+
+## Session close (token-cheap)
+
+Do **not** rewrite every markdown file. Patch only what changed:
+
+1. `NEXT-SESSION.md` — unfinished discussion from this session (or “nothing queued”).
+2. `README.md` backlog — move/remove items we finished or newly agreed.
+3. `requirements.md` — only if a hard/directional decision changed.
+4. Other docs — only if their facts are now wrong.
+
+## This app
+
+- Design **planner** for a Legacy Ornamental Mill 1200, not a mill twin.
+- Static Vite + vanilla JS + Three.js. No React. Units are **inches**.
+- Bits only subtract. Library = `bits/*.dxf` (tip at 0,0). Display name = filename.
+- UI field is **diameter at tip** (`2 × circular distance`). A shallow nick on fat square/hex stock is correct.
+- Adding or selecting a bit must **not** change 2D zoom. New bit lands at the length in the center of the current 2D view.
+- Planner UI: `src/main.js`, `geometry.js`, `view-side.js`, `view3d.js`, `persist.js`, `demo-bits.js`. `recipe.js` / `bits.js` / `view2d.js` are leftover experiments.
+
+## Style
+
+- Ask if a new idea would break a hard requirement.
+- Do not build the README “Later” list unless asked.
+- Prefer small, testable geometry changes; `npm test` (Vitest).
