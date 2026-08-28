@@ -24,9 +24,10 @@
  * mechanics-notes.md). Import one from a CAD sketch via
  * `scripts/import-bit-profile.js` rather than hand-authoring points.
  * @typedef {{type: 'points', points: {d: number, r: number}[]}} PointsProfile
+ * @typedef {{type: 'flute', points: {d: number, r: number}[], bearingRadius: number}} FluteProfile
  *
- * @typedef {RoundProfile | VProfile | FlatProfile | PointsProfile} BitProfile
- * @typedef {{id: string, name: string, tool: string, group: string, profile: BitProfile}} Bit
+ * @typedef {RoundProfile | VProfile | FlatProfile | PointsProfile | FluteProfile} BitProfile
+ * @typedef {{id: string, name: string, tool: string, group: string, kind?: 'plunge' | 'flute', profile: BitProfile}} Bit
  */
 
 export const BIT_GROUPS = /** @type {const} */ ({
@@ -152,6 +153,21 @@ export function validateBitProfile(profile) {
     }
     if (pts[0].d !== 0 || pts[0].r !== 0) {
       throw new Error('Points profile must start at the tip, {d: 0, r: 0} — that\'s the circularDistance reference point.');
+    }
+    return;
+  }
+  if (profile.type === 'flute') {
+    const pts = profile.points;
+    if (!(Array.isArray(pts) && pts.length >= 2)) {
+      throw new Error('Flute profile needs an array of at least two {d, r} points.');
+    }
+    for (const p of pts) {
+      if (!(typeof p.d === 'number' && typeof p.r === 'number' && p.d >= 0 && p.r >= 0)) {
+        throw new Error('Every flute profile point needs non-negative numeric d and r.');
+      }
+    }
+    if (!(typeof profile.bearingRadius === 'number' && profile.bearingRadius >= 0 && Number.isFinite(profile.bearingRadius))) {
+      throw new Error('Flute profile needs a non-negative bearingRadius.');
     }
     return;
   }

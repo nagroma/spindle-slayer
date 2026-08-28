@@ -4,9 +4,9 @@
 // min(stock, bit envelopes) is gone, including out to the blank's face
 // when a bit is plunged inside the stock. Camera (viewBox) is owned by the app.
 
-import { faceRadiusAt, sampleStations, isRun, isCutHidden, bakeCutRadii } from './geometry.js';
+import { faceRadiusAt, sampleStations, isRun, isCutHidden, bakeCutRadii, isFlute } from './geometry.js';
 import { stockFaceRadius } from './stock.js';
-import { profilePoints, profileMaxDepth, profileMaxRadius } from './profile.js';
+import { profilePoints, profileMaxDepth, profileMaxRadius, fluteOuterRadius, fluteBearingRadius, fluteBitCenterRadius, isFluteProfile } from './profile.js';
 
 /**
  * @typedef {import('./geometry.js').Model} Model
@@ -36,6 +36,15 @@ export function sideContentBounds(model) {
   let xMax = face;
   for (const p of model.placements) {
     if (isCutHidden(p)) continue;
+    if (isFlute(p)) {
+      const flute = /** @type {import('./profile.js').FluteProfile} */ (p.profile);
+      const stick = fluteBearingRadius(flute) + fluteOuterRadius(flute);
+      xMax = Math.max(xMax, p.circularDistance + stick);
+      if (isRun(p) && p.endCircularDistance != null) {
+        xMax = Math.max(xMax, p.endCircularDistance + stick);
+      }
+      continue;
+    }
     const depth = profileMaxDepth(p.profile);
     xMax = Math.max(xMax, p.circularDistance + depth);
     if (isRun(p) && p.endCircularDistance != null) {
@@ -105,7 +114,10 @@ export function viewBoxAroundPlacement(model, p, pixelW, pixelH) {
   const h = Math.max(maxR * 2.6, 2.4);
   const aspect = pixelW > 0 && pixelH > 0 ? pixelW / pixelH : 0.7;
   const xMinWant = -face - 0.3;
-  const xMaxWant = Math.max(face, p.circularDistance + maxD) + 0.4;
+  const flute = isFlute(p) ? /** @type {import('./profile.js').FluteProfile} */ (p.profile) : null;
+  const xMaxWant = flute
+    ? Math.max(face, fluteBitCenterRadius(p.circularDistance, flute) + fluteOuterRadius(flute)) + 0.4
+    : Math.max(face, p.circularDistance + maxD) + 0.4;
   const contentW = xMaxWant - xMinWant;
   const width = Math.max(h * aspect, contentW);
   return {
@@ -130,6 +142,7 @@ export function stockSilhouettePath(stock) {
  * @returns {string} SVG path in (radius, length) inches
  */
 export function bitProfilePath(p, opts = {}) {
+  if (isFlute(p)) return fluteCirclesPath(p, p.circularDistance, p.atLength);
   const pts = profilePoints(p.profile);
   if (pts.length < 2) return '';
   const sgn = opts.mirror ? -1 : 1;
@@ -173,6 +186,13 @@ export function bitEndProfilePath(p, opts = {}) {
  */
 export function bitSmearPath(p, opts = {}) {
   if (!isRun(p)) return '';
+  if (isFlute(p)) {
+    const flute = /** @type {import('./profile.js').FluteProfile} */ (p.profile);
+    const R = fluteOuterRadius(flute);
+    const x0 = fluteBitCenterRadius(p.circularDistance, flute);
+    const x1 = fluteBitCenterRadius(/** @type {number} */ (p.endCircularDistance), flute);
+    return stadiumPath(x0, p.atLength, x1, /** @type {number} */ (p.endAtLength), R);
+  }
   const pts = profilePoints(p.profile);
   if (pts.length < 2) return '';
   const sgn = opts.mirror ? -1 : 1;
@@ -214,12 +234,69 @@ function closedBitPoints(p, sgn) {
 }
 
 /**
+ * Two concentric circles on the bit axis: inner = bearing, outer = cutter OD.
+ * Diameter-at-bearing is the wood the bearing rides; the axis sits `bearingRadius` outside that.
+ * @param {Placement} p
+ * @param {number} cd
+ * @param {number} at
+ */
+function fluteCirclesPath(p, cd, at) {
+  const flute = /** @type {import('./profile.js').FluteProfile} */ (p.profile);
+  const outer = fluteOuterRadius(flute);
+  const inner = fluteBearingRadius(flute);
+  const cx = fluteBitCenterRadius(cd, flute);
+  return circlePath(cx, at, outer) + ' ' + circlePath(cx, at, Math.min(inner, outer * 0.95));
+}
+
+/** @param {number} cx @param {number} cy @param {number} r */
+function circlePath(cx, cy, r) {
+  if (!(r > 0)) return '';
+  return `M ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy}`;
+}
+
+/**
+ * Convex hull of two equal-radius circles (run smear).
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ * @param {number} r
+ */
+function stadiumPath(x0, y0, x1, y1, r) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return circlePath(x0, y0, r);
+  const nx = (-dy / len) * r;
+  const ny = (dx / len) * r;
+  return (
+    `M ${x0 + nx} ${y0 + ny} L ${x1 + nx} ${y1 + ny} ` +
+    `A ${r} ${r} 0 0 1 ${x1 - nx} ${y1 - ny} L ${x0 - nx} ${y0 - ny} ` +
+    `A ${r} ${r} 0 0 1 ${x0 + nx} ${y0 + ny} Z`
+  );
+}
+
+/**
  * Tiny profile glyph for the bit palette.
  * @param {import('./profile.js').BitProfile} profile
  * @param {{ size?: number }} [opts]
  */
 export function bitIconSVG(profile, opts = {}) {
   const size = opts.size ?? 44;
+  if (isFluteProfile(profile)) {
+    const flute = /** @type {import('./profile.js').FluteProfile} */ (profile);
+    const outer = Math.max(fluteOuterRadius(flute), 0.05);
+    const inner = Math.max(Math.min(fluteBearingRadius(flute), outer * 0.95), 0.02);
+    const pad = outer * 0.18;
+    const s = 2 * (outer + pad);
+    return (
+      `<svg class="bit-icon flute" viewBox="${-outer - pad} ${-outer - pad} ${s} ${s}" ` +
+      `width="${size}" height="${size}" aria-hidden="true">` +
+      `<circle cx="0" cy="0" r="${outer}" />` +
+      `<circle class="bearing" cx="0" cy="0" r="${inner}" fill="none" />` +
+      `</svg>`
+    );
+  }
   const pts = profilePoints(profile);
   if (pts.length < 2) return '';
   const maxD = Math.max(...pts.map((p) => p.d), 0.05);
@@ -353,22 +430,31 @@ export function renderSideSVG(model, opts = {}) {
     .filter((p) => !isCutHidden(p))
     .map((p) => {
       const sel = p.id === selectedId;
-      const tipR = Math.max(0.04, Math.min(profileMaxRadius(p.profile), profileMaxDepth(p.profile)) * 0.06);
+      const flute = isFlute(p) ? /** @type {import('./profile.js').FluteProfile} */ (p.profile) : null;
+      const fluteCls = flute ? ' flute' : '';
+      const tipR = flute
+        ? Math.max(0.05, fluteBearingRadius(flute) * 0.15)
+        : Math.max(0.04, Math.min(profileMaxRadius(p.profile), profileMaxDepth(p.profile)) * 0.06);
+      const tipX = flute ? fluteBitCenterRadius(p.circularDistance, flute) : p.circularDistance;
       const smear = bitSmearPath(p);
       const endPath = bitEndProfilePath(p);
       const endBit = endPath
-        ? `<path class="bit-end${sel ? ' selected' : ''}" data-placement="${p.id}" data-end="true" d="${endPath}" />`
+        ? `<path class="bit-end${fluteCls}${sel ? ' selected' : ''}" data-placement="${p.id}" data-end="true" ${flute ? 'fill-rule="evenodd" ' : ''}d="${endPath}" />`
         : '';
+      const endTipX =
+        flute && p.endCircularDistance != null
+          ? fluteBitCenterRadius(p.endCircularDistance, flute)
+          : p.endCircularDistance;
       const endTip = isRun(p)
         ? `<circle class="bit-tip-end${sel ? ' selected' : ''}" data-placement="${p.id}" data-end="true" ` +
-          `cx="${p.endCircularDistance}" cy="${p.endAtLength}" r="${Math.max(0.06, tipR)}" />`
+          `cx="${endTipX}" cy="${p.endAtLength}" r="${Math.max(0.06, tipR)}" />`
         : '';
       return (
-        (smear ? `<path class="bit-smear${sel ? ' selected' : ''}" data-placement="${p.id}" d="${smear}" />` : '') +
-        `<path class="bit${sel ? ' selected' : ''}" data-placement="${p.id}" ` +
-        `d="${bitProfilePath(p)}" />` +
+        (smear ? `<path class="bit-smear${fluteCls}${sel ? ' selected' : ''}" data-placement="${p.id}" d="${smear}" />` : '') +
+        `<path class="bit${fluteCls}${sel ? ' selected' : ''}" data-placement="${p.id}" ` +
+        `${flute ? 'fill-rule="evenodd" ' : ''}d="${bitProfilePath(p)}" />` +
         `<circle class="bit-tip${sel ? ' selected' : ''}" data-placement="${p.id}" ` +
-        `cx="${p.circularDistance}" cy="${p.atLength}" r="${Math.max(0.05, tipR)}" />` +
+        `cx="${tipX}" cy="${p.atLength}" r="${Math.max(0.05, tipR)}" />` +
         endBit +
         endTip
       );
@@ -449,12 +535,17 @@ export function patchSideSVG(svg, model, selectedId, viewBox) {
       endPath.classList.toggle('selected', p.id === selectedId);
     }
     if (tip) {
-      tip.setAttribute('cx', String(p.circularDistance));
+      const flute = isFlute(p) ? /** @type {import('./profile.js').FluteProfile} */ (p.profile) : null;
+      tip.setAttribute('cx', String(flute ? fluteBitCenterRadius(p.circularDistance, flute) : p.circularDistance));
       tip.setAttribute('cy', String(p.atLength));
       tip.classList.toggle('selected', p.id === selectedId);
     }
     if (endTip && p.endCircularDistance != null && p.endAtLength != null) {
-      endTip.setAttribute('cx', String(p.endCircularDistance));
+      const flute = isFlute(p) ? /** @type {import('./profile.js').FluteProfile} */ (p.profile) : null;
+      endTip.setAttribute(
+        'cx',
+        String(flute ? fluteBitCenterRadius(p.endCircularDistance, flute) : p.endCircularDistance)
+      );
       endTip.setAttribute('cy', String(p.endAtLength));
       endTip.classList.toggle('selected', p.id === selectedId);
     }

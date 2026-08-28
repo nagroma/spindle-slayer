@@ -18,7 +18,7 @@ Domain background for the mill and for this planner. Product decisions live in `
 | **Flute / reed** | travels start→end | fixed angle, then index | horizontal, side against stock |
 | **Spiral** | travels start→end | geared to travel | horizontal, side against stock |
 
-The planner today models **plunge** (parked, full revolution) and **run / taper** (the same bit travels from a start pose to an end pose). Flutes and spirals are later; the remaining-wood math is already `radius(length, θ)` so those can be added without starting over.
+The planner models **plunge** (parked, full revolution), **run / taper**, and **flutes** (side-mounted, indexed around the blank). Remaining-wood math is `radius(length, θ)`. A flute does not revolve: 2D remaining wood stays the turned envelope; 3D subtracts the cutter at each index angle. Spirals are later.
 
 ## Vocabulary
 
@@ -40,7 +40,7 @@ Use these words in the app and in docs. Longer product rules are in `requirement
 **Circular distance on the mill** depends on mount:
 
 - **Plunge** (bit into the workpiece, tip first): the tip / bottom center of the bit. For a V bit, the point of the V.
-- **Side-mounted** (later, flutes/spirals): the point on the bit farthest from the bit’s own axis. A flat end mill run the full length leaves a cylinder at that radius.
+- **Side-mounted** (flutes): the bearing. A flute DXF is offset in X by the bearing radius; the shape beyond that is the cut depth. Diameter at bearing matches the wood the bearing rides. The 2D bit image is two circles on the bit axis (inner = bearing, outer = max DXF X). A 1/2″ round with a 3/8″ bearing on 3″ stock sits the axis at 1.6875″ from centerline and cuts 1/4″ deep.
 
 In this app, circular distance is always a **radius** (inches from the blank’s centerline). The typed field is diameter.
 
@@ -64,7 +64,7 @@ Bit shapes come from `bits/*.dxf` (inches, tip at 0,0). The live library is that
 
 JSON, format `legacy-1200-project`, default name `spindle.lomp`. Stock plus cuts by **bit id** (DXF filename without extension). Profiles are not copied into the file; Open reloads them from `bits/`. The file also stores the 2D view box and 3D camera. Pane widths stay in the browser.
 
-A cut records length, circular distance, optional `hidden`, and if run is on: end length and end circular distance.
+A cut records length, circular distance, optional `hidden`, and if run is on: end length and end circular distance. Flute cuts also store `indexIncrementDeg`.
 
 ## 3D preview axes
 

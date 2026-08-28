@@ -15,7 +15,10 @@
  * @typedef {{type: 'v', angleDeg: number}} VProfile
  * @typedef {{type: 'flat', r: number}} FlatProfile
  * @typedef {{type: 'points', points: ProfilePoint[]}} PointsProfile
- * @typedef {RoundProfile | VProfile | FlatProfile | PointsProfile} BitProfile
+ * Side-mounted flute: d = X from the bit axis, r = along the cutter.
+ * bearingRadius is min(d) — the inner circle in 2D.
+ * @typedef {{type: 'flute', points: ProfilePoint[], bearingRadius: number}} FluteProfile
+ * @typedef {RoundProfile | VProfile | FlatProfile | PointsProfile | FluteProfile} BitProfile
  */
 
 export const NO_CUT = Number.POSITIVE_INFINITY;
@@ -42,7 +45,7 @@ export function roundNosePoints(radius, samples = 48) {
  * @returns {ProfilePoint[]}
  */
 export function profilePoints(profile) {
-  if (profile.type === 'points') return profile.points;
+  if (profile.type === 'points' || profile.type === 'flute') return profile.points;
   if (profile.type === 'round') return roundNosePoints(profile.r);
   if (profile.type === 'flat') {
     return [
@@ -70,6 +73,7 @@ export function profilePoints(profile) {
  * @returns {number | null}
  */
 export function depthForWidth(profile, width) {
+  if (profile.type === 'flute') return null;
   const s = Math.abs(width);
   if (s < 1e-12) return 0;
 
@@ -137,7 +141,50 @@ export function plungeEnvelope(profile, circularDistance, s) {
 }
 
 /** @param {BitProfile} profile */
+export function isFluteProfile(profile) {
+  return Boolean(profile && profile.type === 'flute');
+}
+
+/**
+ * Outer circle radius in the 2D bit image: max X from the DXF (bit axis to cutter).
+ * For 0.5in_Round that is 0.4375″ (Ø 0.875″ = bearing + 2 × cut depth).
+ * @param {FluteProfile} profile
+ */
+export function fluteOuterRadius(profile) {
+  const pts = profile.points;
+  let maxD = profile.bearingRadius || 0;
+  for (const p of pts) {
+    if (p.d > maxD) maxD = p.d;
+  }
+  return Math.max(0, maxD);
+}
+
+/**
+ * How far the cutter sits past the bearing, inches.
+ * @param {FluteProfile} profile
+ */
+export function fluteCutDepth(profile) {
+  return Math.max(0, fluteOuterRadius(profile) - fluteBearingRadius(profile));
+}
+
+/** @param {FluteProfile} profile */
+export function fluteBearingRadius(profile) {
+  if (Number.isFinite(profile.bearingRadius)) return Math.max(0, profile.bearingRadius);
+  return Math.min(...profile.points.map((p) => p.d));
+}
+
+/**
+ * Workpiece radius of the bit axis: bearing rides at `cd`, axis is outside by the bearing radius.
+ * @param {number} circularDistance bearing seat, inches from centerline
+ * @param {FluteProfile} profile
+ */
+export function fluteBitCenterRadius(circularDistance, profile) {
+  return circularDistance + fluteBearingRadius(profile);
+}
+
+/** @param {BitProfile} profile */
 export function profileMaxRadius(profile) {
+  if (profile.type === 'flute') return fluteOuterRadius(profile);
   if (profile.type === 'round' || profile.type === 'flat') return profile.r;
   if (profile.type === 'v') return Infinity;
   return Math.max(...profile.points.map((p) => p.r));
@@ -145,6 +192,7 @@ export function profileMaxRadius(profile) {
 
 /** @param {BitProfile} profile */
 export function profileMaxDepth(profile) {
+  if (profile.type === 'flute') return fluteCutDepth(profile);
   if (profile.type === 'round') return profile.r;
   if (profile.type === 'flat') return 0;
   if (profile.type === 'v') return 1;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { importDxfProfile, importDxfOverlay } from '../src/dxf-profile.js';
+import { importDxfProfile, importDxfOverlay, importDxfFluteProfile, sampleBulgeSegment } from '../src/dxf-profile.js';
 
 const dxfPath = fileURLToPath(new URL('../reference/Bit Profile.dxf', import.meta.url));
 
@@ -30,6 +30,35 @@ describe('importDxfProfile (real reference/Bit Profile.dxf)', () => {
     const joint = points.find((p) => Math.abs(p.d - 14.390671578856171) < 1e-6);
     expect(joint).toBeDefined();
     expect(joint.r).toBeCloseTo(5.499231413260183, 6);
+  });
+});
+
+function polylineDxf(verts) {
+  const lines = [
+    '0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'ENTITIES',
+    '0', 'POLYLINE', '8', 'PROFILE', '66', '1',
+  ];
+  for (const [x, y] of verts) {
+    lines.push('0', 'VERTEX', '8', 'PROFILE', '10', String(x), '20', String(y), '30', '0');
+  }
+  lines.push('0', 'SEQEND', '0', 'ENDSEC', '0', 'EOF', '');
+  return lines.join('\n');
+}
+
+describe('importDxfProfile auto axis', () => {
+  it('ignores a tiny origin wiggle so a wide ogee keeps X as radius', () => {
+    const dxf = polylineDxf([
+      [0, 0],
+      [0.000011, -0.001765],
+      [0.025612, -0.000397],
+      [1.50826, 0.753113],
+    ]);
+    const pts = importDxfProfile(dxf, { dAxis: 'auto' });
+    const maxD = Math.max(...pts.map((p) => p.d));
+    const maxR = Math.max(...pts.map((p) => p.r));
+    expect(maxR).toBeCloseTo(1.508, 2);
+    expect(maxD).toBeCloseTo(0.753, 2);
   });
 });
 
@@ -84,5 +113,39 @@ describe('importDxfOverlay', () => {
     expect(dMax).toBeGreaterThan(20);
     expect(rMax).toBeGreaterThan(0.4);
     expect(rMax).toBeLessThan(4);
+  });
+});
+
+describe('sampleBulgeSegment', () => {
+  it('traces a 90° arc of the 1/2″ flute round (center at the bearing)', () => {
+    const a = { d: 0.1875, r: 0 };
+    const b = { d: 0.4375, r: 0.25 };
+    const bulge = 0.4142135623730951;
+    const pts = sampleBulgeSegment(a, b, bulge, 16);
+    const last = pts[pts.length - 1];
+    expect(last.d).toBeCloseTo(0.4375, 10);
+    expect(last.r).toBeCloseTo(0.25, 10);
+    const cx = 0.1875;
+    const cy = 0.25;
+    for (const p of pts) {
+      expect(Math.hypot(p.d - cx, p.r - cy)).toBeCloseTo(0.25, 5);
+    }
+  });
+});
+
+describe('importDxfFluteProfile', () => {
+  const flutePath = fileURLToPath(new URL('../bits/Flute/0.5in_Round.dxf', import.meta.url));
+
+  it('reads the half-circle without requiring a tip at (0,0)', () => {
+    const profile = importDxfFluteProfile(readFileSync(flutePath, 'utf8'));
+    expect(profile.type).toBe('flute');
+    expect(profile.bearingRadius).toBeCloseTo(0.1875, 6);
+    expect(profile.points[0].d).toBeCloseTo(0.1875, 6);
+    expect(profile.points[0].r).toBeCloseTo(0, 6);
+    const maxD = Math.max(...profile.points.map((p) => p.d));
+    expect(maxD).toBeCloseTo(0.4375, 3);
+    const ys = profile.points.map((p) => p.r);
+    expect(Math.max(...ys)).toBeCloseTo(0.5, 4);
+    expect(profile.points.length).toBeGreaterThan(8);
   });
 });

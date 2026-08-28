@@ -158,11 +158,96 @@ function dedupeConsecutive(points, eps = 1e-9) {
 }
 
 /**
- * Sketch coordinates: d = DXF X, r = DXF Y (before axis remap).
- * One chain per entity so overlay import can reverse a chain to avoid chord jumps.
- * @param {string} dxfText
- * @returns {ProfilePoint[][]}
+ * Intermediate points of a DXF bulge arc from a to b (excluding a, including b).
+ * bulge = tan(included-angle / 4). Positive is CCW.
+ * @param {ProfilePoint} a
+ * @param {ProfilePoint} b
+ * @param {number} bulge
+ * @param {number} [samples]
+ * @returns {ProfilePoint[]}
  */
+export function sampleBulgeSegment(a, b, bulge, samples = 16) {
+  if (!Number.isFinite(bulge) || Math.abs(bulge) < 1e-12) return [{ d: b.d, r: b.r }];
+  const dx = b.d - a.d;
+  const dy = b.r - a.r;
+  const chord = Math.hypot(dx, dy);
+  if (chord < 1e-15) return [{ d: b.d, r: b.r }];
+  const included = 4 * Math.atan(bulge);
+  const sinHalf = Math.sin(included / 2);
+  if (Math.abs(sinHalf) < 1e-15) return [{ d: b.d, r: b.r }];
+  const radius = Math.abs(chord / (2 * sinHalf));
+  const h = radius * Math.cos(included / 2);
+  const sign = bulge >= 0 ? 1 : -1;
+  const nx = -dy / chord;
+  const ny = dx / chord;
+  const cx = (a.d + b.d) / 2 + nx * h * sign;
+  const cy = (a.r + b.r) / 2 + ny * h * sign;
+  const startAng = Math.atan2(a.r - cy, a.d - cx);
+  const n = Math.max(4, samples);
+  /** @type {ProfilePoint[]} */
+  const pts = [];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const ang = startAng + included * t;
+    pts.push({ d: cx + radius * Math.cos(ang), r: cy + radius * Math.sin(ang) });
+  }
+  pts[pts.length - 1] = { d: b.d, r: b.r };
+  return pts;
+}
+
+/**
+ * @param {{ d: number, r: number, bulge?: number }[]} verts
+ * @param {number} [samples]
+ * @returns {ProfilePoint[]}
+ */
+function expandPolylineBulges(verts, samples = 16, expandBulge = false) {
+  if (!verts.length) return [];
+  if (!expandBulge) {
+    return dedupeConsecutive(verts.map((v) => ({ d: v.d, r: v.r })));
+  }
+  /** @type {ProfilePoint[]} */
+  const out = [{ d: verts[0].d, r: verts[0].r }];
+  for (let i = 0; i < verts.length - 1; i++) {
+    const a = verts[i];
+    const b = verts[i + 1];
+    const more = sampleBulgeSegment(a, b, a.bulge ?? 0, samples);
+    for (const p of more) out.push(p);
+  }
+  return dedupeConsecutive(out);
+}
+
+function vertexBulge(tags) {
+  const matches = tags.filter((t) => t.code === 42);
+  if (!matches.length) return 0;
+  const v = parseFloat(matches[0].value);
+  return Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * LWPOLYLINE vertices are 10/20 pairs with an optional 42 bulge per vertex.
+ * @param {DxfTag[]} tags
+ * @returns {{ d: number, r: number, bulge: number }[]}
+ */
+function lwpolylineVerts(tags) {
+  /** @type {{ d: number, r: number, bulge: number }[]} */
+  const verts = [];
+  /** @type {{ d: number, r: number, bulge: number } | null} */
+  let cur = null;
+  for (const tag of tags) {
+    if (tag.code === 10) {
+      if (cur) verts.push(cur);
+      cur = { d: parseFloat(tag.value), r: 0, bulge: 0 };
+    } else if (tag.code === 20 && cur) {
+      cur.r = parseFloat(tag.value);
+    } else if (tag.code === 42 && cur) {
+      const v = parseFloat(tag.value);
+      cur.bulge = Number.isFinite(v) ? v : 0;
+    }
+  }
+  if (cur) verts.push(cur);
+  return verts;
+}
+
 function parseDxfSketchChains(dxfText, opts = {}) {
   const tags = parseDxfTags(dxfText);
   const entities = extractEntities(tags);
@@ -170,37 +255,34 @@ function parseDxfSketchChains(dxfText, opts = {}) {
 
   /** @type {ProfilePoint[][]} */
   const chains = [];
-  /** @type {ProfilePoint[] | null} */
+  /** @type {{ d: number, r: number, bulge: number }[] | null} */
   let polyline = null;
   /** @param {ProfilePoint[] | null | undefined} pts */
   const pushChain = (pts) => {
     if (pts && pts.length) chains.push(pts);
   };
+  const pushPoly = (verts) => {
+    if (verts && verts.length) pushChain(expandPolylineBulges(verts, arcSamples, Boolean(opts.expandBulge)));
+  };
 
   for (const entity of entities) {
     if (entity.type === 'POLYLINE') {
-      pushChain(polyline);
+      pushPoly(polyline);
       polyline = [];
       continue;
     }
     if (entity.type === 'VERTEX') {
       if (!polyline) polyline = [];
-      polyline.push({ d: num(entity.tags, 10), r: num(entity.tags, 20) });
+      polyline.push({ d: num(entity.tags, 10), r: num(entity.tags, 20), bulge: vertexBulge(entity.tags) });
       continue;
     }
     if (entity.type === 'SEQEND') {
-      pushChain(polyline);
+      pushPoly(polyline);
       polyline = null;
       continue;
     }
     if (entity.type === 'LWPOLYLINE') {
-      const xs = nums(entity.tags, 10);
-      const ys = nums(entity.tags, 20);
-      const n = Math.min(xs.length, ys.length);
-      /** @type {ProfilePoint[]} */
-      const pts = [];
-      for (let i = 0; i < n; i++) pts.push({ d: xs[i], r: ys[i] });
-      pushChain(pts);
+      pushPoly(lwpolylineVerts(entity.tags));
       continue;
     }
     if (entity.type === 'LINE') {
@@ -221,7 +303,7 @@ function parseDxfSketchChains(dxfText, opts = {}) {
     if (entity.type === 'ENDSEC' || entity.type === 'ENDBLK') continue;
     throw new Error(`Unsupported DXF entity type "${entity.type}" in profile.`);
   }
-  pushChain(polyline);
+  pushPoly(polyline);
   if (!chains.length) throw new Error('DXF profile contained no geometry.');
   return chains;
 }
@@ -258,8 +340,8 @@ function stitchSketchChains(chains) {
   return out.length ? dedupeConsecutive(out) : [];
 }
 
-function parseDxfSketchPoints(dxfText) {
-  return dedupeConsecutive(parseDxfSketchChains(dxfText).flat());
+function parseDxfSketchPoints(dxfText, opts = {}) {
+  return dedupeConsecutive(parseDxfSketchChains(dxfText, opts).flat());
 }
 
 function clampRadius(points) {
@@ -306,7 +388,34 @@ export function importDxfProfile(dxfText, opts = {}) {
  * @returns {ProfilePoint[]}
  */
 export function importDxfOverlay(dxfText) {
-  return clampRadius(orientOverlay(stitchSketchChains(parseDxfSketchChains(dxfText, { arcSamples: 48 }))));
+  return clampRadius(orientOverlay(stitchSketchChains(parseDxfSketchChains(dxfText, { arcSamples: 48, expandBulge: true }))));
+}
+
+/**
+ * Side-mounted flute bit: X is distance from the bit axis (bearing offset),
+ * Y is along the cutter. Do not require a tip at (0,0).
+ * @param {string} dxfText
+ * @returns {import('./profile.js').FluteProfile}
+ */
+export function importDxfFluteProfile(dxfText) {
+  const points = parseDxfSketchPoints(dxfText, { expandBulge: true, arcSamples: 24 });
+  if (points.length < 2) throw new Error('Flute DXF needs at least two profile points.');
+  let minD = Infinity;
+  let minR = Infinity;
+  let maxR = -Infinity;
+  for (const p of points) {
+    if (!(Number.isFinite(p.d) && Number.isFinite(p.r))) {
+      throw new Error('Flute DXF contained a non-numeric point.');
+    }
+    if (p.d < minD) minD = p.d;
+    if (p.r < minR) minR = p.r;
+    if (p.r > maxR) maxR = p.r;
+  }
+  if (!(minD >= 0) || !Number.isFinite(minD)) {
+    throw new Error('Flute DXF X (bearing offset) must be non-negative.');
+  }
+  const shifted = minR < 0 ? points.map((p) => ({ d: p.d, r: p.r - minR })) : points;
+  return { type: 'flute', points: shifted, bearingRadius: minD };
 }
 
 /**
@@ -318,7 +427,10 @@ function orientProfile(points, dAxis) {
   let axis = dAxis;
   if (axis === 'auto') {
     let i = 1;
-    while (i < points.length && Math.hypot(points[i].d, points[i].r) < 1e-4) i++;
+    // Ignore tessellation wiggles at the origin (Magnate 7554's second
+    // vertex is ~0.002″ along Y). Those made auto-detect treat Y as radius
+    // and stretch a wide ogee along the spindle.
+    while (i < points.length && Math.hypot(points[i].d, points[i].r) < 0.01) i++;
     const p = points[i] ?? points[1];
     // If the first step off the tip is mostly in X, X is radius (round cutting
     // edge) and Y is the bit axis.

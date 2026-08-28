@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { depthForWidth, plungeEnvelope, NO_CUT, roundNosePoints } from '../src/profile.js';
+import {
+  depthForWidth,
+  plungeEnvelope,
+  NO_CUT,
+  roundNosePoints,
+  fluteOuterRadius,
+  fluteCutDepth,
+  fluteBearingRadius,
+  fluteBitCenterRadius,
+} from '../src/profile.js';
 
 describe('depthForWidth (round-nose closed form)', () => {
   const round = { type: 'round', r: 1 };
@@ -43,5 +52,27 @@ describe('plungeEnvelope', () => {
 
   it('does not cut beyond the bit radius along the length', () => {
     expect(plungeEnvelope(round, 1.5, 1.2)).toBe(NO_CUT);
+  });
+});
+
+describe('flute DXF sizes', () => {
+  const flute = {
+    type: 'flute',
+    bearingRadius: 0.1875,
+    points: [
+      { d: 0.1875, r: 0 },
+      { d: 0.4375, r: 0.25 },
+      { d: 0.1875, r: 0.5 },
+    ],
+  };
+
+  it('reads inner, outer, and cut depth from the profile', () => {
+    expect(fluteBearingRadius(flute)).toBeCloseTo(0.1875, 10);
+    expect(fluteOuterRadius(flute)).toBeCloseTo(0.4375, 10);
+    expect(fluteCutDepth(flute)).toBeCloseTo(0.25, 10);
+  });
+
+  it('places the bit axis at wood radius plus bearing radius', () => {
+    expect(fluteBitCenterRadius(1.5, flute)).toBeCloseTo(1.6875, 10);
   });
 });

@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
-import { bakeCutRadii, remainingFromCut, sampleStations } from './geometry.js';
+import { bakeCutRadii, remainingFromCut, sampleStations, hasVisibleFlutes, fluteRadiusAt } from './geometry.js';
 import { stockMaxRadius } from './stock.js';
 
 /**
@@ -27,6 +27,41 @@ export function millToWorld(radius, thetaDeg, length) {
 
 /** Saved 3D cameras from older framing are ignored so a new default can fill the pane. */
 export const CAMERA3D_LAYOUT = 'headstock-up-fill';
+
+/**
+ * Mesh density for the 3D preview. 1 is the original fast/coarse mesh.
+ * @typedef {1 | 2 | 3} MeshQuality
+ * @typedef {{
+ *   nTheta: number,
+ *   nThetaFlute: number,
+ *   dense: boolean,
+ *   perInch: number,
+ *   perInchMax: number,
+ *   flutePerInch: number,
+ *   flutePosesPerInch: number,
+ * }} MeshQualityOpts
+ */
+
+/** @type {Record<MeshQuality, MeshQualityOpts>} */
+export const MESH_QUALITY = {
+  1: { nTheta: 96, nThetaFlute: 192, dense: false, perInch: 4, perInchMax: 240, flutePerInch: 8, flutePosesPerInch: 12 },
+  2: { nTheta: 180, nThetaFlute: 288, dense: true, perInch: 12, perInchMax: 560, flutePerInch: 28, flutePosesPerInch: 28 },
+  3: { nTheta: 288, nThetaFlute: 480, dense: true, perInch: 24, perInchMax: 960, flutePerInch: 56, flutePosesPerInch: 56 },
+};
+
+/** @param {unknown} n @returns {MeshQuality} */
+export function clampMeshQuality(n) {
+  const q = Math.round(Number(n));
+  if (q === 2 || q === 3) return /** @type {MeshQuality} */ (q);
+  return 1;
+}
+
+/** @param {MeshQuality} level */
+export function meshQualityLabel(level) {
+  if (level === 3) return 'Best';
+  if (level === 2) return 'Better';
+  return 'Fast';
+}
 
 /**
  * Three-quarter view, slightly from above, whole spindle filling ~88% of the pane.
@@ -63,14 +98,22 @@ export function camera3dFramePose(length, maxR, aspect, fovDeg = 32) {
 
 /**
  * @param {Model} model
+ * @param {MeshQuality} [quality]
  * @returns {THREE.BufferGeometry}
  */
-export function buildSpindleGeometry(model) {
+export function buildSpindleGeometry(model, quality = 1) {
   const stock = model.stock;
   const { length } = stock;
-  const xs = sampleStations(model, { dense: false });
+  const q = MESH_QUALITY[clampMeshQuality(quality)];
+  const xs = sampleStations(model, {
+    dense: q.dense,
+    perInch: q.perInch,
+    perInchMax: q.perInchMax,
+    flutePerInch: q.flutePerInch,
+  });
   const cuts = bakeCutRadii(model, xs);
-  const nTheta = 96;
+  const flutes = hasVisibleFlutes(model);
+  const nTheta = flutes ? q.nThetaFlute : q.nTheta;
   const cols = nTheta + 1;
   const nx = xs.length - 1;
 
@@ -80,7 +123,8 @@ export function buildSpindleGeometry(model) {
     const cut = cuts[i];
     for (let j = 0; j <= nTheta; j++) {
       const theta = (360 * j) / nTheta;
-      const r = remainingFromCut(stock, theta, cut);
+      const groove = flutes ? fluteRadiusAt(model, x, theta, { posesPerInch: q.flutePosesPerInch }) : Number.POSITIVE_INFINITY;
+      const r = remainingFromCut(stock, theta, Math.min(cut, groove));
       positions.push(...millToWorld(r, theta, x));
     }
   }
@@ -152,6 +196,8 @@ export function createView3d(container) {
   /** @type {Model | null} */
   let framedModel = null;
   let autoFrame = true;
+  /** @type {MeshQuality} */
+  let meshQuality = 1;
 
   controls.addEventListener('start', () => {
     autoFrame = false;
@@ -209,7 +255,7 @@ export function createView3d(container) {
   function update(model, opts = {}) {
     framedModel = model;
     if (opts.rebuild !== false) {
-      const geo = buildSpindleGeometry(model);
+      const geo = buildSpindleGeometry(model, meshQuality);
       if (mesh) {
         mesh.geometry.dispose();
         mesh.geometry = geo;
@@ -255,6 +301,10 @@ export function createView3d(container) {
     resize,
     getCamera,
     setCamera,
+    /** @param {unknown} level */
+    setQuality(level) {
+      meshQuality = clampMeshQuality(level);
+    },
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();

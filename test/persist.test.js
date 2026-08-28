@@ -97,6 +97,46 @@ describe('project JSON', () => {
     expect(shown.cuts[0].hidden).toBeUndefined();
   });
 
+  it('round-trips flute index increment', () => {
+    const fluteBit = {
+      id: '0.5in_Round',
+      name: '0.5in_Round',
+      tool: '0.5in_Round',
+      group: 'flute',
+      kind: 'flute',
+      profile: {
+        type: 'flute',
+        bearingRadius: 0.1875,
+        points: [
+          { d: 0.1875, r: 0 },
+          { d: 0.4375, r: 0.25 },
+          { d: 0.1875, r: 0.5 },
+        ],
+      },
+    };
+    const fluteModel = {
+      stock: { type: 'round', length: 20, size: 3.5 },
+      placements: [
+        {
+          id: 'f1',
+          bitId: '0.5in_Round',
+          profile: fluteBit.profile,
+          atLength: 4,
+          circularDistance: 1.5,
+          run: true,
+          endAtLength: 12,
+          endCircularDistance: 1.2,
+          indexIncrementDeg: 20,
+        },
+      ],
+    };
+    const file = serializeProject(fluteModel);
+    expect(file.cuts[0].indexIncrementDeg).toBe(20);
+    const loaded = deserializeProject(file, [fluteBit]);
+    expect(loaded.model.placements[0].indexIncrementDeg).toBe(20);
+    expect(loaded.model.placements[0].profile.type).toBe('flute');
+  });
+
   it('round-trips a 2D overlay profile', () => {
     const overlay = {
       name: 'leg-reference-photo.dxf',

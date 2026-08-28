@@ -2,7 +2,7 @@
 // Prism blank + plunge bits + live 2D/3D. 2D camera is independent of bit drag.
 
 import { defaultDemo } from './demo-bits.js';
-import { MIN_RADIUS, isRun, isCutHidden } from './geometry.js';
+import { MIN_RADIUS, isRun, isCutHidden, isFlute, DEFAULT_FLUTE_INDEX_DEG } from './geometry.js';
 import { stockMaxRadius, stockFaceRadius } from './stock.js';
 import {
   renderSideSVG,
@@ -16,7 +16,7 @@ import {
   viewBoxCenter,
   bitIconSVG,
 } from './view-side.js';
-import { createView3d, CAMERA3D_LAYOUT } from './view3d.js';
+import { createView3d, CAMERA3D_LAYOUT, clampMeshQuality, meshQualityLabel } from './view3d.js';
 import { profileMaxDepth } from './profile.js';
 import { bindSplitters } from './layout.js';
 import {
@@ -81,6 +81,7 @@ function recipeSnapshot() {
       hidden: Boolean(p.hidden),
       endAtLength: p.endAtLength,
       endCircularDistance: p.endCircularDistance,
+      indexIncrementDeg: p.indexIncrementDeg,
     })),
   };
 }
@@ -136,6 +137,7 @@ function applyRecipe(snap) {
     if (c.hidden) p.hidden = true;
     if (c.endAtLength != null) p.endAtLength = c.endAtLength;
     if (c.endCircularDistance != null) p.endCircularDistance = c.endCircularDistance;
+    if (c.indexIncrementDeg != null) p.indexIncrementDeg = c.indexIncrementDeg;
     placements.push(p);
   }
   model.placements = placements;
@@ -173,6 +175,8 @@ const stockTypeEl = /** @type {HTMLSelectElement} */ (document.getElementById('s
 const stockLengthEl = /** @type {HTMLInputElement} */ (document.getElementById('stockLength'));
 const stockSizeEl = /** @type {HTMLInputElement} */ (document.getElementById('stockSize'));
 const sizeKindEl = document.getElementById('sizeKind');
+const meshQualityEl = /** @type {HTMLInputElement} */ (document.getElementById('meshQuality'));
+const meshQualityLabelEl = document.getElementById('meshQualityLabel');
 const paletteEl = document.getElementById('bitPalette');
 const placedListEl = document.getElementById('placedList');
 const sideWrap = document.getElementById('side-wrap');
@@ -197,8 +201,16 @@ const placeRunEl = /** @type {HTMLInputElement} */ (document.getElementById('pla
 const runFieldsEl = document.getElementById('runFields');
 const placeEndLengthEl = /** @type {HTMLInputElement} */ (document.getElementById('placeEndLength'));
 const placeEndDiaEl = /** @type {HTMLInputElement} */ (document.getElementById('placeEndDia'));
+const placeIndexEl = /** @type {HTMLInputElement} */ (document.getElementById('placeIndex'));
+const indexFieldEl = document.getElementById('indexField');
+const placeDiaLabelEl = document.getElementById('placeDiaLabel');
+const placeEndDiaLabelEl = document.getElementById('placeEndDiaLabel');
 
 const view3d = createView3d(threeWrap);
+let meshQuality = clampMeshQuality(savedUi?.meshQuality);
+view3d.setQuality(meshQuality);
+if (meshQualityEl) meshQualityEl.value = String(meshQuality);
+if (meshQualityLabelEl) meshQualityLabelEl.textContent = meshQualityLabel(meshQuality);
 
 /** @type {import('./layout.js').PaneWidths | null} */
 let paneWidths = savedUi?.panes ?? null;
@@ -256,11 +268,23 @@ stockSizeEl.addEventListener('change', () => {
   render({ resetCamera: true, rebuildSide: true });
 });
 
+meshQualityEl?.addEventListener('input', () => {
+  meshQuality = clampMeshQuality(meshQualityEl.value);
+  if (meshQualityLabelEl) meshQualityLabelEl.textContent = meshQualityLabel(meshQuality);
+  view3d.setQuality(meshQuality);
+  persistUi();
+  document.body.style.cursor = meshQuality === 3 ? 'wait' : '';
+  window.requestAnimationFrame(() => {
+    render({ rebuildSide: false, rebuild3d: true });
+    document.body.style.cursor = '';
+  });
+});
+
 paletteEl.innerHTML = bits
-  .map(
-    (b) =>
-      `<button class="bit" type="button" data-bit="${b.id}">${bitIconSVG(b.profile, { size: 28 })}<span class="nm">${b.name}</span></button>`
-  )
+  .map((b) => {
+    const flute = b.kind === 'flute' || b.profile?.type === 'flute';
+    return `<button class="bit${flute ? ' flute' : ''}" type="button" data-bit="${b.id}">${bitIconSVG(b.profile, { size: 28 })}<span class="nm">${b.name}</span></button>`;
+  })
   .join('');
 
 paletteEl.addEventListener('click', (e) => {
@@ -272,13 +296,24 @@ paletteEl.addEventListener('click', (e) => {
   const face = stockFaceRadius(model.stock);
   const center = sideView ? viewBoxCenter(sideView) : { radius: face, length: Math.min(4, model.stock.length / 2) };
   pushUndo();
-  model.placements.push({
+  const fluteBit = bit.kind === 'flute' || bit.profile?.type === 'flute';
+  /** @type {import('./geometry.js').Placement} */
+  const cut = {
     id,
     bitId: bit.id,
     profile: bit.profile,
     atLength: clamp(center.length, 0, model.stock.length),
-    circularDistance: Math.max(MIN_RADIUS, face - 0.25),
-  });
+    // Plunge: nick the face. Flute: bearing rides the wood; DXF offset is applied in the views.
+    circularDistance: Math.max(MIN_RADIUS, fluteBit ? face : face - 0.25),
+  };
+  if (isFlute(cut)) {
+    cut.indexIncrementDeg = DEFAULT_FLUTE_INDEX_DEG;
+    cut.run = true;
+    const span = Math.min(6, Math.max(1, model.stock.length - cut.atLength));
+    cut.endAtLength = clamp(cut.atLength + span, 0, model.stock.length);
+    cut.endCircularDistance = cut.circularDistance;
+  }
+  model.placements.push(cut);
   selectedId = id;
   render({ rebuildSide: true });
 });
@@ -440,6 +475,8 @@ placeEndLengthEl.addEventListener('input', () => applyPlaceEndLength(true));
 placeEndLengthEl.addEventListener('change', () => applyPlaceEndLength(false));
 placeEndDiaEl.addEventListener('input', () => applyPlaceEndDia(true));
 placeEndDiaEl.addEventListener('change', () => applyPlaceEndDia(false));
+placeIndexEl.addEventListener('input', () => applyPlaceIndex(true));
+placeIndexEl.addEventListener('change', () => applyPlaceIndex(false));
 
 /** @param {HTMLInputElement} el */
 function armFieldUndo(el) {
@@ -457,6 +494,7 @@ armFieldUndo(placeLengthEl);
 armFieldUndo(placeDiaEl);
 armFieldUndo(placeEndLengthEl);
 armFieldUndo(placeEndDiaEl);
+armFieldUndo(placeIndexEl);
 armFieldUndo(stockLengthEl);
 armFieldUndo(stockSizeEl);
 placeRunEl.addEventListener('change', () => {
@@ -513,6 +551,16 @@ function applyPlaceEndDia(live) {
   const maxCd = stockMaxRadius(model.stock) + profileMaxDepth(p.profile);
   p.endCircularDistance = clamp(n / 2, MIN_RADIUS, maxCd);
   render({ live, rebuildSide: true, rebuild3d: !live });
+}
+
+/** @param {boolean} live */
+function applyPlaceIndex(live) {
+  const p = selectedPlacement();
+  if (!p || !isFlute(p) || placeIndexEl.value === '') return;
+  const n = Number(placeIndexEl.value);
+  if (!Number.isFinite(n)) return;
+  p.indexIncrementDeg = clamp(n, 1, 180);
+  render({ live, rebuild3d: !live });
 }
 
 {
@@ -726,15 +774,17 @@ function renderPlacedList() {
       const sel = p.id === selectedId ? ' selected' : '';
       const hidden = isCutHidden(p);
       const run = isRun(p);
+      const flute = isFlute(p);
+      const idx = flute ? ` · ${p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG}°` : '';
       const meta = run
-        ? `${fmt(p.atLength)}–${fmt(/** @type {number} */ (p.endAtLength))}" · Ø${fmt(p.circularDistance * 2)}→${fmt(/** @type {number} */ (p.endCircularDistance) * 2)}`
-        : `${fmt(p.atLength)}" from top · ${fmt(p.circularDistance * 2)}" dia`;
+        ? `${fmt(p.atLength)}–${fmt(/** @type {number} */ (p.endAtLength))}" · Ø${fmt(p.circularDistance * 2)}→${fmt(/** @type {number} */ (p.endCircularDistance) * 2)}${idx}`
+        : `${fmt(p.atLength)}" from top · ${fmt(p.circularDistance * 2)}" dia${idx}`;
       const hideTitle = hidden ? 'Show cut' : 'Hide cut';
       return (
         `<div class="placed-item${sel}${hidden ? ' cut-hidden' : ''}" data-placed="${p.id}" draggable="true">` +
         `<span class="placed-num" title="Drag to reorder">${i + 1}</span>` +
         `<button class="placed-main" type="button" draggable="false">` +
-        `${name}${run ? ' · run' : ''}${hidden ? ' · hidden' : ''}` +
+        `${name}${run ? ' · run' : ''}${flute ? ' · flute' : ''}${hidden ? ' · hidden' : ''}` +
         `<span class="meta">${meta}</span>` +
         `</button>` +
         `<span class="placed-ord">` +
@@ -754,26 +804,40 @@ function renderPlacedList() {
 function syncPlaceFields(force = false) {
   const p = selectedPlacement();
   const disabled = !p;
+  const flute = Boolean(p && isFlute(p));
   placeLengthEl.disabled = disabled;
   placeDiaEl.disabled = disabled;
   placeRunEl.disabled = disabled;
   placeEndLengthEl.disabled = disabled;
   placeEndDiaEl.disabled = disabled;
+  placeIndexEl.disabled = disabled || !flute;
   btnDelete.toggleAttribute('disabled', disabled);
   if (!p) {
     if (force || document.activeElement !== placeLengthEl) placeLengthEl.value = '';
     if (force || document.activeElement !== placeDiaEl) placeDiaEl.value = '';
     if (force || document.activeElement !== placeEndLengthEl) placeEndLengthEl.value = '';
     if (force || document.activeElement !== placeEndDiaEl) placeEndDiaEl.value = '';
+    if (force || document.activeElement !== placeIndexEl) placeIndexEl.value = '';
     placeRunEl.checked = false;
     runFieldsEl.hidden = true;
+    if (indexFieldEl) indexFieldEl.hidden = true;
+    if (placeDiaLabelEl) placeDiaLabelEl.textContent = 'Diameter at tip (in)';
+    if (placeEndDiaLabelEl) placeEndDiaLabelEl.textContent = 'End diameter at tip (in)';
     return;
   }
   const run = isRun(p);
+  if (indexFieldEl) indexFieldEl.hidden = !flute;
+  if (placeDiaLabelEl) placeDiaLabelEl.textContent = flute ? 'Diameter at bearing (in)' : 'Diameter at tip (in)';
+  if (placeEndDiaLabelEl) {
+    placeEndDiaLabelEl.textContent = flute ? 'End diameter at bearing (in)' : 'End diameter at tip (in)';
+  }
   if (force || document.activeElement !== placeRunEl) placeRunEl.checked = run;
   runFieldsEl.hidden = !run;
   if (force || document.activeElement !== placeLengthEl) placeLengthEl.value = String(roundPlace(p.atLength));
   if (force || document.activeElement !== placeDiaEl) placeDiaEl.value = String(roundPlace(p.circularDistance * 2));
+  if (flute && (force || document.activeElement !== placeIndexEl)) {
+    placeIndexEl.value = String(roundPlace(p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG));
+  }
   if (run) {
     if (force || document.activeElement !== placeEndLengthEl) {
       placeEndLengthEl.value = String(roundPlace(/** @type {number} */ (p.endAtLength)));
@@ -793,6 +857,7 @@ function persistUi() {
     panes: paneWidths,
     sideView,
     selectedId,
+    meshQuality,
   });
 }
 
@@ -810,6 +875,7 @@ function sessionPayload() {
       ...(p.endAtLength != null && p.endCircularDistance != null
         ? { endAtLength: p.endAtLength, endCircularDistance: p.endCircularDistance }
         : {}),
+      ...(isFlute(p) ? { indexIncrementDeg: p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG } : {}),
     })),
     selectedId,
     sideView,

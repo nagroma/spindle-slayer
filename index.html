@@ -62,6 +62,19 @@
       gap: 8px;
     }
     .stock-fields .field > span { width: 4.6rem; flex: 0 0 auto; }
+    .stock-fields .quality-field { gap: 6px; }
+    .stock-fields .quality-field > span { width: auto; }
+    .stock-fields .quality-field input[type="range"] {
+      width: 4.6rem;
+      padding: 0;
+      accent-color: var(--accent);
+    }
+    .stock-fields .quality-field em {
+      font-style: normal;
+      font-size: 11px;
+      color: var(--muted);
+      min-width: 2.6rem;
+    }
     input, select {
       background: #151412;
       color: var(--ink);
@@ -113,8 +126,12 @@
     }
     button.bit:hover { border-color: var(--accent); }
     button.bit .nm { font-size: 12px; white-space: nowrap; }
+    button.bit.flute { border-color: #2f5c40; }
+    button.bit.flute:hover { border-color: #6cbf84; }
     .bit-icon { flex: 0 0 auto; background: #101110; border-radius: 4px; }
     .bit-icon path { fill: #4a7ea8; fill-opacity: 0.75; stroke: #7eb0d4; stroke-width: 0.03; }
+    .bit-icon.flute circle { fill: #3d7a52; fill-opacity: 0.75; stroke: #7dcc96; stroke-width: 0.04; }
+    .bit-icon.flute circle.bearing { fill: none; stroke: #b6e3c4; stroke-width: 0.05; }
     .workspace {
       flex: 1;
       display: flex;
@@ -285,7 +302,8 @@
       font-size: 12px;
     }
     .place-fields .check input { width: auto; }
-    #runFields[hidden] { display: none; }
+    #runFields[hidden],
+    #indexField[hidden] { display: none; }
     .view-tools {
       display: flex;
       flex-wrap: wrap;
@@ -352,12 +370,18 @@
     }
     #side-wrap svg .bit { fill: #4a7ea8; fill-opacity: 0.45; stroke: #7eb0d4; stroke-width: 1.5; cursor: grab; vector-effect: non-scaling-stroke; }
     #side-wrap svg .bit.selected { fill: #c98a4b; fill-opacity: 0.5; stroke: #f0c48a; }
+    #side-wrap svg .bit.flute { fill: #3d7a52; fill-opacity: 0.4; stroke: #7dcc96; }
+    #side-wrap svg .bit.flute.selected { fill: #4a9a64; fill-opacity: 0.5; stroke: #b6e3c4; }
     #side-wrap svg .bit-smear { fill: #4a7ea8; fill-opacity: 0.16; stroke: none; pointer-events: none; }
     #side-wrap svg .bit-smear.selected { fill: #c98a4b; fill-opacity: 0.2; }
+    #side-wrap svg .bit-smear.flute { fill: #3d7a52; fill-opacity: 0.16; }
+    #side-wrap svg .bit-smear.flute.selected { fill: #4a9a64; fill-opacity: 0.2; }
     #side-wrap svg .bit-tip { fill: #ece6da; pointer-events: auto; cursor: grab; }
     #side-wrap svg .bit-tip.selected { fill: #fff; }
     #side-wrap svg .bit-end { fill: #4a7ea8; fill-opacity: 0.22; stroke: #7eb0d4; stroke-width: 1.5; stroke-dasharray: 4 3; cursor: grab; vector-effect: non-scaling-stroke; }
     #side-wrap svg .bit-end.selected { fill: #c98a4b; fill-opacity: 0.28; stroke: #f0c48a; }
+    #side-wrap svg .bit-end.flute { fill: #3d7a52; fill-opacity: 0.22; stroke: #7dcc96; }
+    #side-wrap svg .bit-end.flute.selected { fill: #4a9a64; fill-opacity: 0.28; stroke: #b6e3c4; }
     #side-wrap svg .bit-tip-end { fill: #ece6da; fill-opacity: 0.9; pointer-events: auto; cursor: grab; }
     #side-wrap svg .bit-tip-end.selected { fill: #fff; }
     #three-wrap { background: #101110; }
@@ -401,6 +425,11 @@
       <label class="field"><span id="sizeKind">Side (in)</span>
         <input id="stockSize" type="number" min="0.5" max="12" step="0.125" />
       </label>
+      <label class="field quality-field" title="How fine the 3D mesh is. Fast is the current preview; Best is slow.">
+        <span>3D</span>
+        <input id="meshQuality" type="range" min="1" max="3" step="1" value="1" />
+        <em id="meshQualityLabel">Fast</em>
+      </label>
     </div>
     <div class="bits" id="bitPalette"></div>
   </div>
@@ -411,7 +440,7 @@
         <label class="field">From headstock (in)
           <input id="placeLength" type="number" min="0" step="0.01" />
         </label>
-        <label class="field">Diameter at tip (in)
+        <label class="field"><span id="placeDiaLabel">Diameter at tip (in)</span>
           <input id="placeDia" type="number" min="0.04" step="0.01" />
         </label>
         <label class="field check"><input id="placeRun" type="checkbox" /> Run / taper</label>
@@ -419,10 +448,13 @@
           <label class="field">End from headstock (in)
             <input id="placeEndLength" type="number" min="0" step="0.01" />
           </label>
-          <label class="field">End diameter at tip (in)
+          <label class="field"><span id="placeEndDiaLabel">End diameter at tip (in)</span>
             <input id="placeEndDia" type="number" min="0.04" step="0.01" />
           </label>
         </div>
+        <label class="field" id="indexField" hidden>Index (deg)
+          <input id="placeIndex" type="number" min="1" max="180" step="1" />
+        </label>
         <div class="cut-actions">
           <span class="history-btns">
             <button class="ghost" id="btnUndo" type="button" title="Undo (Ctrl+Z)">Undo</button>

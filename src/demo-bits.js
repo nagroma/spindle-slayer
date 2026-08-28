@@ -1,8 +1,9 @@
 // @ts-check
 // Bits from bits/*.dxf — inches, half-profile, tip at (0,0).
+// bits/Flute/*.dxf are side-mounted flute bits (bearing offset, no tip at origin).
 // Display name is the filename without extension.
 
-import { importDxfProfile } from './dxf-profile.js';
+import { importDxfProfile, importDxfFluteProfile } from './dxf-profile.js';
 import { validateBitProfile } from './bits.js';
 
 /**
@@ -10,13 +11,30 @@ import { validateBitProfile } from './bits.js';
  * @typedef {import('./geometry.js').Model} Model
  */
 
+function isFlutePath(path) {
+  return /[/\\]Flute[/\\]/i.test(path);
+}
+
 /** @returns {Bit[]} */
 export function loadLibraryBits() {
-  const modules = import.meta.glob('../bits/*.dxf', { query: '?raw', import: 'default', eager: true });
+  const modules = import.meta.glob('../bits/**/*.dxf', { query: '?raw', import: 'default', eager: true });
   const bits = [];
   for (const [path, text] of Object.entries(modules)) {
     const match = path.match(/([^/\\]+)\.dxf$/i);
     const name = match ? match[1] : path;
+    if (isFlutePath(path)) {
+      const profile = importDxfFluteProfile(text);
+      validateBitProfile(profile);
+      bits.push({
+        id: name,
+        name,
+        tool: name,
+        group: 'flute',
+        kind: 'flute',
+        profile,
+      });
+      continue;
+    }
     const points = importDxfProfile(text, { dAxis: 'auto' });
     const profile = { type: 'points', points };
     validateBitProfile(profile);
@@ -25,6 +43,7 @@ export function loadLibraryBits() {
       name,
       tool: name,
       group: 'compound',
+      kind: 'plunge',
       profile,
     });
   }
@@ -37,7 +56,7 @@ export function loadLibraryBits() {
  */
 export function defaultDemo() {
   const bits = loadLibraryBits();
-  const first = bits.find((b) => b.id === 'Magnate_7593') ?? bits[0];
+  const first = bits.find((b) => b.id === 'Magnate_7593') ?? bits.find((b) => b.kind !== 'flute') ?? bits[0];
   /** @type {import('./geometry.js').Placement[]} */
   const placements = [];
   if (first) {

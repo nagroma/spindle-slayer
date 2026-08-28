@@ -21,8 +21,8 @@ If a new idea would break a hard requirement, stop and ask.
 - Start from **prism stock**: round (size = diameter), square (size = side), or hex (size = **across flats**).
 - Lengths are in **inches**.
 - Bits **only subtract**. No glued-on pommel, no additive beads. A ball only appears if the blank is fat enough for that bit at that diameter.
-- **Plunge first** (carriage parked, one full revolution). Flutes and spirals come later; the model `radius(x, θ)` must not block them.
-- **Circular distance** = tip to workpiece centerline. The UI field is **diameter at tip** (`diameter = 2 × circularDistance`).
+- **Plunge first** (carriage parked, one full revolution). Flutes are a second cut kind: side-mounted, bearing path uses the same run / taper fields, index increment is 3D only. The model is still `radius(x, θ)`.
+- **Circular distance** = tip to workpiece centerline. For a flute bit, this is where the **bearing** sits. The bit axis is offset outward by the DXF bearing radius; the designer does not add that by hand. The UI field is **diameter at tip** (`diameter = 2 × circularDistance`), labeled diameter at bearing when a flute is selected.
 - How deep a bit cuts is **the user’s design choice**. Example: 3.5″ square stock with a 3.00″ diameter at the tip only nicks ~0.25″ into the faces. That is correct. Do not “help” by carving the whole bit profile into the wood.
 - Taper is a future **cut**, not starting stock.
 
@@ -39,13 +39,13 @@ If a new idea would break a hard requirement, stop and ask.
 - **2D**: profile vs centerline (length down, radius left/right). Place the bit; see remaining wood.
 - **3D**: remaining wood after a full revolution.
 - Drag is **rough** placement. Typed **from headstock (in)** and **diameter at tip (in)** are the precise values.
-- 2D has **zoom and scroll along the blank**, no rotation. The drawing stays **left-justified** while you zoom (try this; we can revert). Do not use dragging a bit as the way to scroll the drawing.
+- 2D has **zoom and scroll along the blank**, no rotation. The drawing stays **left-justified** while you zoom. Do not use dragging a bit as the way to scroll the drawing.
 - **Adding or selecting a bit must not change the 2D zoom.** A newly added bit is placed at the **center of the current 2D view** (along the blank). The user is usually already looking where they want to work.
 
 ### Layout and memory
 
 - Screen layout is **horizontal**: cuts on the left, 2D in the middle, 3D on the right, with **draggable size controls** between them.
-- Stock (type / length / size) sits in **three stacked rows on the left** of the top bar; bit buttons occupy the rest of that bar and **wrap as the window gets wider**.
+- Stock (type / length / size) sits on the **left** of the top bar, with a compact **3D** quality slider next to it; bit buttons occupy the rest of that bar and **wrap as the window gets wider**.
 - Last layout, last 2D camera, last selected cut, and last stock+cuts must come back on the **next run** (refresh / reopen the app).
 - Projects are separate files on disk so more than one design can exist.
 
@@ -70,7 +70,7 @@ These are “this seems like a good direction right now,” not frozen.
 
 ### What is stored where
 
-- **User/layout preferences** (pane widths, 2D zoom/pan, selected cut): browser `localStorage`.
+- **User/layout preferences** (pane widths, 2D zoom/pan, selected cut, 3D mesh quality): browser `localStorage`.
 - **Last session recipe** (stock + cuts): also `localStorage`, so a refresh does not lose work.
 - **Named projects**: `.lomp` files (JSON). Save is a browser download so Chrome/Edge can show a real Save dialog (name + folder). A short-lived `.tmp` in Downloads is the browser staging the file. Open defaults to `.lomp` and still has All files for old `.json`/`.txt`. The file stores stock and cuts by **bit id** (filename). Profiles are not copied into the file; they are read from `bits/` on open.
 - The project file also stores **2D zoom/pan** and the **3D camera** (position + look-at). Open restores those views. Pane splitter widths stay in the browser (`localStorage`), not in the file.
@@ -84,9 +84,9 @@ These are “this seems like a good direction right now,” not frozen.
 
 - Compact bit chips (icon + filename) in the top bar; compact cut list on the left with the typed headstock/diameter fields under it.
 - A cut can be **hidden** (still in the list, ignored in remaining wood) without deleting it. Undoable.
-- 2D: mouse wheel zooms (pinned left), shift+wheel scrolls along the blank, drag empty space to scroll up/down, +/− and Fit 2D buttons. Left-pin is still a trial; keep using it until we decide to keep or revert.
+- 2D: mouse wheel zooms (pinned left), shift+wheel scrolls along the blank, drag empty space to scroll up/down, +/− and Fit 2D buttons.
 - 2D remaining wood is the blank minus the bit’s 2D solid (and the opposite side after a revolution), so the hole follows the bit where they overlap.
-- 3D: headstock at the **top**; default view fills the pane at a slight three-quarter tilt. Left-right drag **spins around the spindle**; drag up/down to flip the piece over. Lights stay world-fixed.
+- 3D: headstock at the **top**; default view fills the pane at a slight three-quarter tilt. Left-right drag **spins around the spindle**; drag up/down to flip the piece over. Lights stay world-fixed. A **3D** slider next to stock (Fast / Better / Best) sets mesh density. Fast is the original preview; Best is slow. Stored in the browser, not in the `.lomp`.
 - Pane splitter defaults and minimum widths are a starting point; users override them.
 - Bit count is expected in the **low tens**, not hundreds.
 
@@ -100,7 +100,7 @@ These are “this seems like a good direction right now,” not frozen.
 
 ### Explicitly later (not in current scope)
 
-- Flute / spiral / indexed-cut UI (high, after photo overlay).
+- **Spirals** (flutes are in; spirals later).
 - In-app photo scaler (medium, only if overlay needs it).
 - Better bit display names and full bit-management (medium).
 - Taper as its own cut — **deferred**. Current run/taper matches the mill well enough.
@@ -114,7 +114,7 @@ These are “this seems like a good direction right now,” not frozen.
 | Term | Meaning |
 |---|---|
 | Headstock | Zero end of length. “From headstock” is distance along the blank. |
-| Circular distance | Tip to centerline, inches. |
+| Circular distance | Tip to centerline, inches. On a flute, the bearing seat. |
 | Diameter at tip | `2 × circular distance`. What the designer types. |
 | Cut / placement | One bit, parked at one length, at one circular distance (optional run to an end pose). |
 | Recipe | The list of cuts on this blank. |

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { radiusAt, MIN_RADIUS, faceRadiusAt, isRun, isCutHidden, bakeCutRadii, remainingFromCut } from '../src/geometry.js';
+import { radiusAt, MIN_RADIUS, faceRadiusAt, isRun, isCutHidden, bakeCutRadii, remainingFromCut, fluteIndexAngles, isFlute, sampleStations } from '../src/geometry.js';
 import { stockRadius } from '../src/stock.js';
 
 // Pommel truth-test from the operating model:
@@ -170,5 +170,97 @@ describe('bakeCutRadii', () => {
         expect(remainingFromCut(pommel.stock, theta, cuts[i])).toBeCloseTo(radiusAt(pommel, xs[i], theta), 10);
       }
     }
+  });
+});
+
+const fluteHalf = {
+  type: 'flute',
+  bearingRadius: 0.1875,
+  points: [
+    { d: 0.1875, r: 0 },
+    { d: 0.4375, r: 0.25 },
+    { d: 0.1875, r: 0.5 },
+  ],
+};
+
+function fluteModel(extra = {}) {
+  return {
+    stock: { type: 'round', length: 20, size: 3.5 },
+    placements: [
+      {
+        id: 'f1',
+        bitId: '0.5in_Round',
+        profile: fluteHalf,
+        atLength: 8,
+        circularDistance: 1.75,
+        run: true,
+        endAtLength: 14,
+        endCircularDistance: 1.75,
+        indexIncrementDeg: 90,
+        ...extra,
+      },
+    ],
+  };
+}
+
+describe('indexed flute', () => {
+  it('puts a groove every 20° all the way around (18 flutes)', () => {
+    const angles = fluteIndexAngles(20);
+    expect(angles).toHaveLength(18);
+    expect(angles[0]).toBe(0);
+    expect(angles[angles.length - 1]).toBeCloseTo(340, 10);
+  });
+
+  it('cuts 1/4″ deep at each index on a cylinder, and leaves the face between flutes', () => {
+    const model = fluteModel();
+    expect(isFlute(model.placements[0])).toBe(true);
+    expect(radiusAt(model, 11, 0)).toBeCloseTo(1.5, 6);
+    expect(radiusAt(model, 11, 90)).toBeCloseTo(1.5, 6);
+    expect(radiusAt(model, 11, 45)).toBeCloseTo(1.75, 6);
+    expect(radiusAt(model, 1, 0)).toBeCloseTo(1.75, 6);
+  });
+
+  it('does not change the 2D remaining silhouette (revolution envelope only)', () => {
+    const model = fluteModel();
+    expect(faceRadiusAt(model, 11)).toBeCloseTo(1.75, 8);
+  });
+
+  it('follows a taper: deeper remaining radius tracks the bearing path', () => {
+    const model = fluteModel({
+      circularDistance: 1.5,
+      endCircularDistance: 1.0,
+    });
+    expect(radiusAt(model, 8, 0)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(model, 14, 0)).toBeCloseTo(0.75, 5);
+  });
+
+  it('on 3″ round stock with bearing at the face, cuts 1/4″ (remaining 1.25″)', () => {
+    const model = {
+      stock: { type: 'round', length: 34, size: 3 },
+      placements: [
+        {
+          id: 'f1',
+          bitId: '0.5in_Round',
+          profile: fluteHalf,
+          atLength: 10,
+          circularDistance: 1.5,
+          run: true,
+          endAtLength: 20,
+          endCircularDistance: 1.5,
+          indexIncrementDeg: 90,
+        },
+      ],
+    };
+    expect(radiusAt(model, 15, 0)).toBeCloseTo(1.25, 6);
+    expect(radiusAt(model, 15, 90)).toBeCloseTo(1.25, 6);
+    expect(radiusAt(model, 15, 45)).toBeCloseTo(1.5, 6);
+    expect(faceRadiusAt(model, 15)).toBeCloseTo(1.5, 8);
+  });
+
+  it('can sample the flute path more densely for a finer 3D mesh', () => {
+    const model = fluteModel();
+    const coarse = sampleStations(model, { dense: false, flutePerInch: 8 });
+    const fine = sampleStations(model, { dense: true, perInch: 24, perInchMax: 960, flutePerInch: 56 });
+    expect(fine.length).toBeGreaterThan(coarse.length);
   });
 });

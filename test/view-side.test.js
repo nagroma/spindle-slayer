@@ -75,6 +75,32 @@ describe('side view', () => {
     expect(icon).toContain('<path');
   });
 
+  it('draws a flute bit as two concentric circles', () => {
+    const flute = {
+      id: 'f1',
+      bitId: '0.5in_Round',
+      profile: {
+        type: 'flute',
+        bearingRadius: 0.1875,
+        points: [
+          { d: 0.1875, r: 0 },
+          { d: 0.4375, r: 0.25 },
+          { d: 0.1875, r: 0.5 },
+        ],
+      },
+      atLength: 10,
+      circularDistance: 1.5,
+    };
+    const d = bitProfilePath(flute);
+    // Axis at CD + bearing (1.5 + 0.1875). Outer Ø 0.875, inner Ø 0.375.
+    expect(d).toContain('M 2.125 10');
+    expect(d).toContain('A 0.4375 0.4375');
+    expect(d).toContain('A 0.1875 0.1875');
+    const icon = bitIconSVG(flute.profile);
+    expect(icon).toContain('bit-icon flute');
+    expect(icon).toContain('<circle');
+  });
+
   it('draws a square shoulder on a ½″ endmill, not a long diagonal', () => {
     const model = {
       stock: { type: 'square', length: 10, size: 3.5 },

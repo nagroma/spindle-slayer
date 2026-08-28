@@ -1,5 +1,5 @@
 // @ts-check
-import { isRun, isCutHidden } from './geometry.js';
+import { isRun, isCutHidden, isFlute, DEFAULT_FLUTE_INDEX_DEG } from './geometry.js';
 
 export const UI_KEY = 'legacy1200.ui';
 export const SESSION_KEY = 'legacy1200.session';
@@ -51,6 +51,7 @@ export const PROJECT_SAVE_PICKER = {
  *   panes?: PaneWidths,
  *   sideView?: ViewBox | null,
  *   selectedId?: string | null,
+ *   meshQuality?: number,
  * }} UiState
  * @typedef {{
  *   stock: import('./stock.js').Stock,
@@ -63,6 +64,7 @@ export const PROJECT_SAVE_PICKER = {
  *     hidden?: boolean,
  *     endAtLength?: number,
  *     endCircularDistance?: number,
+ *     indexIncrementDeg?: number,
  *   }[],
  *   selectedId?: string | null,
  *   sideView?: ViewBox | null,
@@ -129,6 +131,9 @@ export function serializeProject(model, extra = {}) {
         cut.endAtLength = p.endAtLength;
         cut.endCircularDistance = p.endCircularDistance;
         cut.endDiameterAtTip = /** @type {number} */ (p.endCircularDistance) * 2;
+      }
+      if (isFlute(p)) {
+        cut.indexIncrementDeg = p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG;
       }
       return cut;
     }),
@@ -223,6 +228,11 @@ export function deserializeProject(data, bits) {
       placement.run = true;
     }
     if (c.hidden === true) placement.hidden = true;
+    if (isFlute(placement)) {
+      const inc = Number(c.indexIncrementDeg);
+      placement.indexIncrementDeg =
+        Number.isFinite(inc) && inc > 0 ? Math.min(180, Math.max(1, inc)) : DEFAULT_FLUTE_INDEX_DEG;
+    }
     placements.push(placement);
   }
   return {
