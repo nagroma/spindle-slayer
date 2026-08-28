@@ -19,6 +19,7 @@ playwright-report/
 
 # Local shop files: .ltrace sessions embed photos
 user/
+*.crv3d
 bits/*.png
 bits/*.jpg
 bits/*.jpeg

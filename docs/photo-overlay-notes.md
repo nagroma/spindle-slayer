@@ -4,7 +4,7 @@ How we turned a phone photo into a file the 2D view can place behind the stock. 
 
 ## Target file
 
-`reference/leg-overlay-3.5x29.5.png`
+A local crop `reference/leg-overlay-3.5x29.5.png` was used while proving the overlay idea. It is not in the repo.
 
 - Whole image = stock rectangle: **3.5″ wide × 29.5″ tall**, headstock at the **top**.
 - 100 pixels per inch (350 × 2950). DPI is set in the PNG.

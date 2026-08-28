@@ -96,7 +96,7 @@ These are “this seems like a good direction right now,” not frozen.
 - **Interactive tracer** is a second page (`trace.html`): click the edge, fit lines/arcs/splines, snap a known radius, merge pieces into one bit, export DXF. Photo opacity is adjustable. Sessions save as `.ltrace`. Same loop for **bit** half-profiles. Stay on bit-matching (join / type / known radius), not CAD handles. Later: constrain each segment to a real bit half-profile (a cut from the side), and treat fit direction per segment rather than as a whole-trace toggle.
 - **2D overlay**: load a traced spindle DXF behind the planner profile (inches, headstock at the top). It stays visible while placing bits. An opacity slider fades it. The overlay is a reference only — it does not cut wood. It is stored in the session and in `.lomp`. A raw photo behind the 2D stock is still possible later. Phone photos are perspective; do not squash them into the stock rectangle.
 
-- While building photo tools, keep short notes: `docs/photo-overlay-notes.md`. A prepared (but clipped) test crop is `reference/leg-overlay-3.5x29.5.png`.
+- While building photo tools, keep short notes: `docs/photo-overlay-notes.md`.
 
 ### Explicitly later (not in current scope)
 
