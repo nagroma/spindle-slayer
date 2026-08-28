@@ -46,6 +46,7 @@ export const PROJECT_SAVE_PICKER = {
  * @typedef {{ xMin: number, yMin: number, width: number, height: number }} ViewBox
  * @typedef {{ x: number, y: number, z: number }} Vec3
  * @typedef {{ position: Vec3, target: Vec3, up?: Vec3, layout?: string }} Camera3d
+ * @typedef {{ name: string, points: { d: number, r: number }[], opacity: number }} OverlayState
  * @typedef {{
  *   panes?: PaneWidths,
  *   sideView?: ViewBox | null,
@@ -66,6 +67,7 @@ export const PROJECT_SAVE_PICKER = {
  *   selectedId?: string | null,
  *   sideView?: ViewBox | null,
  *   camera3d?: Camera3d | null,
+ *   overlay?: OverlayState | null,
  * }} SessionState
  */
 
@@ -104,7 +106,7 @@ export function saveSession(session) {
 
 /**
  * @param {import('./geometry.js').Model} model
- * @param {{ selectedId?: string | null, sideView?: ViewBox | null, camera3d?: Camera3d | null }} [extra]
+ * @param {{ selectedId?: string | null, sideView?: ViewBox | null, camera3d?: Camera3d | null, overlay?: OverlayState | null }} [extra]
  */
 export function serializeProject(model, extra = {}) {
   /** @type {Record<string, unknown>} */
@@ -136,6 +138,8 @@ export function serializeProject(model, extra = {}) {
   if (sideView) file.sideView = sideView;
   const camera3d = parseCamera3d(extra.camera3d);
   if (camera3d) file.camera3d = camera3d;
+  const overlay = parseOverlay(extra.overlay);
+  if (overlay) file.overlay = overlay;
   return file;
 }
 
@@ -166,6 +170,7 @@ export function parseProjectJson(text) {
  *   missing: string[],
  *   sideView: ViewBox | null,
  *   camera3d: Camera3d | null,
+ *   overlay: OverlayState | null,
  * } | null}
  */
 export function deserializeProject(data, bits) {
@@ -229,6 +234,7 @@ export function deserializeProject(data, bits) {
     missing,
     sideView: parseViewBox(obj.sideView),
     camera3d: parseCamera3d(obj.camera3d),
+    overlay: parseOverlay(obj.overlay),
   };
 }
 
@@ -246,6 +252,7 @@ export function hydrateSession(bits, session) {
       selectedId: session.selectedId,
       sideView: session.sideView,
       camera3d: session.camera3d,
+      overlay: session.overlay,
     },
     bits
   );
@@ -298,7 +305,29 @@ export function parseCamera3d(raw) {
   const layout = typeof /** @type {any} */ (raw).layout === 'string' ? /** @type {any} */ (raw).layout : undefined;
   if (up && layout) return { position, target, up, layout };
   if (up) return { position, target, up };
+  if (layout) return { position, target, layout };
   return { position, target };
+}
+
+/** @param {unknown} raw @returns {OverlayState | null} */
+export function parseOverlay(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = /** @type {any} */ (raw);
+  if (!Array.isArray(v.points) || v.points.length < 2) return null;
+  /** @type {{ d: number, r: number }[]} */
+  const points = [];
+  for (const p of v.points) {
+    const d = Number(p?.d);
+    const r = Number(p?.r);
+    if (!Number.isFinite(d) || !Number.isFinite(r)) continue;
+    points.push({ d, r: Math.max(0, r) });
+  }
+  if (points.length < 2) return null;
+  let opacity = Number(v.opacity);
+  if (!Number.isFinite(opacity)) opacity = 55;
+  opacity = Math.max(0, Math.min(100, opacity));
+  const name = typeof v.name === 'string' && v.name.trim() ? v.name.trim() : 'overlay.dxf';
+  return { name, points, opacity };
 }
 
 /**

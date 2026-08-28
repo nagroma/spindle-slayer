@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { remainingSilhouettePath, bitProfilePath, renderSideSVG, bitIconSVG, viewBoxFitBlank, pinViewBoxLeft, SIDE_MARGIN_PX } from '../src/view-side.js';
+import { remainingSilhouettePath, bitProfilePath, renderSideSVG, bitIconSVG, viewBoxFitBlank, pinViewBoxLeft, SIDE_MARGIN_PX, overlaySilhouettePath, overlayOutlinePath } from '../src/view-side.js';
 import { faceRadiusAt } from '../src/geometry.js';
 import { plungeEnvelope, profilePoints } from '../src/profile.js';
 
@@ -174,5 +174,38 @@ describe('side view', () => {
     expect(pinned.xMin).toBeCloseTo(-1.75 - margin, 6);
     expect(pinned.xMin).toBeGreaterThan(wide.xMin);
     expect(pinned.width).toBe(wide.width);
+  });
+
+  it('draws a traced overlay behind remaining wood and an outline on top', () => {
+    const overlay = {
+      points: [
+        { d: 0, r: 1.75 },
+        { d: 10, r: 1 },
+        { d: 20, r: 1.75 },
+      ],
+      opacity: 50,
+    };
+    const svg = renderSideSVG(pommel, { overlay });
+    expect(svg).toContain('class="overlay"');
+    expect(svg).toContain('class="overlay-edge"');
+    expect(svg).toContain(overlaySilhouettePath(overlay.points));
+    const fillAt = svg.indexOf('overlay-fill');
+    const remainAt = svg.indexOf('class="remaining"');
+    const edgeAt = svg.indexOf('overlay-edge');
+    expect(fillAt).toBeGreaterThan(-1);
+    expect(remainAt).toBeGreaterThan(fillAt);
+    expect(edgeAt).toBeGreaterThan(remainAt);
+  });
+
+  it('does not draw a straight chord across a gap in the overlay', () => {
+    const points = [
+      { d: 0, r: 1 },
+      { d: 0.1, r: 1 },
+      { d: 8, r: 1 },
+      { d: 8.1, r: 1 },
+    ];
+    const d = overlayOutlinePath(points);
+    expect(d).not.toContain('1 0.1 L 1 8');
+    expect((d.match(/M /g) || []).length).toBeGreaterThanOrEqual(4);
   });
 });

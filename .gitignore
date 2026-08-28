@@ -6,4 +6,20 @@ playwright-report/
 *.log
 .DS_Store
 .vercel
-.env*.local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+.vercel
+*.~tmp
+
+# Local shop files: .ltrace sessions embed photos
+user/
+bits/*.png
+bits/*.jpg
+bits/*.jpeg
+bits/*.webp

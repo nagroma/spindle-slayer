@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spindle Slayer Trace</title>
+  <style>
+    :root {
+      --bg: #1c1b19;
+      --panel: #232120;
+      --line: #3a3733;
+      --ink: #ece6da;
+      --muted: #a49c8e;
+      --accent: #c98a4b;
+      --wood: #c99a5f;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--line);
+    }
+    header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+    header .header-titles { display: flex; flex-direction: column; gap: 2px; }
+    header .note { font-size: 12px; color: var(--muted); }
+    header .file-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    header .file-actions .page-link { margin-right: 4px; }
+    header a.page-link { color: var(--accent); font-size: 13px; text-decoration: none; }
+    header a.page-link:hover { color: var(--ink); }
+    header .project-name { font-size: 12px; color: var(--muted); max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    header .project-name:empty { display: none; }
+    .wrap { flex: 1; display: flex; min-height: 0; }
+    aside {
+      width: 22rem;
+      flex: 0 0 auto;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      padding: 10px 12px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .field.row { flex-direction: row; align-items: flex-start; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink); flex-wrap: nowrap; }
+    .field.row span { line-height: 1.35; }
+    .field.row input[type="number"] { width: 4.6rem; }
+    input, select, textarea {
+      background: #151412;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    input[type="range"] { padding: 0; accent-color: var(--accent); }
+    textarea { min-height: 2.6rem; resize: vertical; }
+    button.ghost, a.btn {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
+    }
+    button.ghost:hover, a.btn:hover { color: var(--ink); }
+    button.ghost.on { color: var(--ink); border-color: var(--accent); }
+    button.accent {
+      background: var(--accent);
+      color: #1c1b19;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .step {
+      font-size: 13px;
+      line-height: 1.4;
+      background: #151412;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .step strong { color: var(--accent); font-weight: 600; }
+    .btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+    .history-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 0 0 auto;
+    }
+    .history-btns button {
+      font-size: 10px;
+      padding: 2px 7px;
+      line-height: 1.2;
+    }
+    .segs { display: flex; flex-direction: column; gap: 6px; }
+    .seg {
+      font-size: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .seg.sel {
+      border-color: #ece6da;
+      background: #322a22;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .seg .meta { color: var(--muted); }
+    .seg .snaps { display: flex; flex-wrap: wrap; gap: 4px; }
+    .seg .snaps button { font-size: 11px; padding: 3px 7px; cursor: pointer; }
+    .seg input.r-in { width: 4.4rem; padding: 3px 6px; font-size: 12px; }
+    .preview-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .image-name { font-size: 12px; color: var(--muted); word-break: break-all; }
+    #preview { width: 100%; height: 160px; background: #151412; border: 1px solid var(--line); border-radius: 6px; }
+    #stage { flex: 1; min-width: 0; position: relative; background: #151412; }
+    #stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    #fileImage, #fileSession { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-titles">
+      <h1>Spindle Slayer Trace</h1>
+      <span class="note">Trace a photo to a DXF, then load that file as a 2D overlay in the planner.</span>
+    </div>
+    <div class="file-actions">
+      <a class="page-link" href="/">Planner</a>
+      <span class="project-name" id="sessionName"></span>
+      <button class="ghost" id="btnOpen" type="button">Open</button>
+      <button class="ghost" id="btnSave" type="button">Save</button>
+    </div>
+  </header>
+  <div class="wrap">
+    <aside>
+      <label class="field">What you are tracing
+        <select id="mode">
+          <option value="spindle">Spindle (target outline)</option>
+          <option value="bit">Bit (half-profile)</option>
+        </select>
+      </label>
+      <label class="field"><span id="lengthCaption">Length between end centers (in)</span>
+        <input id="knownInches" type="number" min="0.01" step="0.01" value="29.5" />
+      </label>
+      <label class="field row">
+        <input id="axisIsLength" type="checkbox" checked />
+        <span>This number is the distance between the two end centers</span>
+      </label>
+      <label class="field">Known radii (in), comma-separated
+        <input id="knownRadii" type="text" placeholder="e.g. 0.5, 1, 3" />
+      </label>
+      <div class="btns">
+        <button class="ghost" id="btnLoad" type="button">Load image</button>
+        <button class="ghost" id="btnReset" type="button">Reset marks</button>
+      </div>
+      <div class="image-name" id="imageName"></div>
+      <label class="field">Photo opacity
+        <input id="photoOpacity" type="range" min="0" max="100" value="80" />
+      </label>
+      <label class="field">Tool
+        <select id="tool">
+          <option value="place">Place points</option>
+          <option value="editPoints">Edit placed points</option>
+          <option value="editFit">Edit fit curve</option>
+        </select>
+      </label>
+      <div id="joinPanel" hidden>
+        <div class="preview-label">Join at selected point</div>
+        <div class="meta" style="text-transform:none;letter-spacing:0;font-size:12px;">Smooth = tangent (no kink). Sharp = corner.</div>
+        <div class="btns">
+          <button class="ghost" type="button" data-point-join="none">None</button>
+          <button class="ghost" type="button" data-point-join="sharp">Sharp</button>
+          <button class="ghost" type="button" data-point-join="smooth">Smooth</button>
+        </div>
+      </div>
+      <div class="step" id="step"></div>
+      <div class="btns">
+        <span class="history-btns">
+          <button class="ghost" id="btnUndo" type="button" title="Undo (Ctrl+Z)">Undo</button>
+          <button class="ghost" id="btnRedo" type="button" title="Redo (Ctrl+Y)">Redo</button>
+        </span>
+        <button class="accent" id="btnFinish" type="button">Finish &amp; fit</button>
+        <button class="ghost" id="btnDxf" type="button">Save DXF</button>
+      </div>
+      <div class="preview-label">Fitted half-profile (inches)</div>
+      <svg id="preview" viewBox="-2 0 4 10" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="segs" id="segs"></div>
+    </aside>
+    <div id="stage"><canvas id="canvas"></canvas></div>
+  </div>
+  <input id="fileImage" type="file" accept="image/*" />
+  <input id="fileSession" type="file" accept=".ltrace,.json,application/json" />
+  <script type="module" src="/src/trace/main.js"></script>
+</body>
+</html>

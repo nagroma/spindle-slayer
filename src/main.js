@@ -32,6 +32,7 @@ import {
   lompDownloadName,
   PROJECT_FILENAME,
 } from './persist.js';
+import { importDxfOverlay } from './dxf-profile.js';
 
 const { bits, model: initial } = defaultDemo();
 const savedUi = loadUi();
@@ -55,6 +56,9 @@ let nextId = 1 + model.placements.reduce((m, p) => {
 }, 1);
 let cameraFramed = false;
 const savedCamera3d = hydrated?.camera3d ?? savedSession?.camera3d ?? null;
+
+/** @type {import('./persist.js').OverlayState | null} */
+let overlay = hydrated?.overlay ?? null;
 
 const MAX_HISTORY = 40;
 /** @type {ReturnType<typeof recipeSnapshot>[]} */
@@ -180,6 +184,12 @@ const btnFit = document.getElementById('btnFit');
 const btnZoomIn = document.getElementById('btnZoomIn');
 const btnZoomOut = document.getElementById('btnZoomOut');
 const fileOpen = /** @type {HTMLInputElement} */ (document.getElementById('fileOpen'));
+const fileOverlay = /** @type {HTMLInputElement} */ (document.getElementById('fileOverlay'));
+const btnOverlay = document.getElementById('btnOverlay');
+const btnOverlayClear = document.getElementById('btnOverlayClear');
+const overlayOpWrap = document.getElementById('overlayOpWrap');
+const overlayOpacityEl = /** @type {HTMLInputElement} */ (document.getElementById('overlayOpacity'));
+const overlayNameEl = document.getElementById('overlayName');
 const projectNameEl = document.getElementById('projectName');
 const placeLengthEl = /** @type {HTMLInputElement} */ (document.getElementById('placeLength'));
 const placeDiaEl = /** @type {HTMLInputElement} */ (document.getElementById('placeDia'));
@@ -300,6 +310,49 @@ function zoomSide(factor) {
 }
 btnZoomIn.addEventListener('click', () => zoomSide(1 / 1.25));
 btnZoomOut.addEventListener('click', () => zoomSide(1.25));
+
+function syncOverlayUi() {
+  const has = !!(overlay && overlay.points.length >= 2);
+  if (btnOverlayClear) btnOverlayClear.hidden = !has;
+  if (overlayOpWrap) overlayOpWrap.hidden = !has;
+  if (overlayNameEl) overlayNameEl.textContent = has ? overlay.name : '';
+  if (has && overlayOpacityEl && document.activeElement !== overlayOpacityEl) {
+    overlayOpacityEl.value = String(overlay.opacity);
+  }
+}
+
+btnOverlay?.addEventListener('click', () => {
+  if (!fileOverlay) return;
+  fileOverlay.value = '';
+  fileOverlay.click();
+});
+btnOverlayClear?.addEventListener('click', () => {
+  overlay = null;
+  syncOverlayUi();
+  render({ rebuildSide: true, rebuild3d: false });
+});
+overlayOpacityEl?.addEventListener('input', () => {
+  if (!overlay) return;
+  overlay = { ...overlay, opacity: Number(overlayOpacityEl.value) || 0 };
+  render({ rebuildSide: true, rebuild3d: false });
+});
+if (fileOverlay) {
+  fileOverlay.onchange = async () => {
+    const file = fileOverlay.files?.[0];
+    if (!file) return;
+    try {
+      const text = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+      const points = importDxfOverlay(text);
+      overlay = { name: file.name, points, opacity: overlay?.opacity ?? 55 };
+      syncOverlayUi();
+      render({ rebuildSide: true, rebuild3d: false });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not read that DXF as a profile overlay.');
+    } finally {
+      fileOverlay.value = '';
+    }
+  };
+}
 
 placedListEl.addEventListener('click', (e) => {
   const hideBtn = /** @type {HTMLElement} */ (e.target).closest('[data-hide]');
@@ -507,6 +560,7 @@ function projectSnapshotJson() {
       selectedId,
       sideView,
       camera3d: view3d.getCamera(),
+      overlay,
     }),
     null,
     2
@@ -574,6 +628,7 @@ function applyProject(data, filename) {
   }
   setProjectLabel(filename);
   sideView = loaded.sideView;
+  overlay = loaded.overlay;
   const cam = loaded.camera3d?.layout === CAMERA3D_LAYOUT ? loaded.camera3d : null;
   cameraFramed = Boolean(cam);
   clearHistory();
@@ -759,6 +814,7 @@ function sessionPayload() {
     selectedId,
     sideView,
     camera3d: view3d.getCamera(),
+    overlay,
   };
 }
 function persistSession() {
@@ -796,7 +852,7 @@ function render(opts = {}) {
   if (rebuildSide || !svg) {
     const w = Math.max(200, wrap.width || 420);
     const h = Math.max(200, wrap.height || 640);
-    const html = renderSideSVG(model, { selectedId, width: w, height: h, viewBox: sideView });
+    const html = renderSideSVG(model, { selectedId, width: w, height: h, viewBox: sideView, overlay });
     const hint = sideWrap.querySelector('.hint');
     sideWrap.innerHTML = html;
     if (hint) sideWrap.appendChild(hint);
@@ -825,6 +881,7 @@ function render(opts = {}) {
   }
   syncPlaceFields(forceFields);
   syncHistoryButtons();
+  syncOverlayUi();
 }
 
 /** @type {{ id: string, end: boolean, startLen: number, startCd: number, startEndLen?: number, startEndCd?: number, startP: {radius: number, length: number} } | null} */

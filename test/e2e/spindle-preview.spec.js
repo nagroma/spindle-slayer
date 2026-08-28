@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('spindle preview loads with side view and 3D canvas', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveTitle(/Legacy 1200/);
+  await expect(page).toHaveTitle(/Spindle Slayer Planner/);
   await expect(page.locator('#side-wrap svg')).toBeVisible();
   await expect(page.locator('#side-wrap svg .remaining')).toBeVisible();
   await expect(page.locator('#bitPalette .bit').first()).toBeVisible();

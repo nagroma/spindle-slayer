@@ -97,6 +97,24 @@ describe('project JSON', () => {
     expect(shown.cuts[0].hidden).toBeUndefined();
   });
 
+  it('round-trips a 2D overlay profile', () => {
+    const overlay = {
+      name: 'leg-reference-photo.dxf',
+      points: [
+        { d: 0, r: 1.75 },
+        { d: 10, r: 1.2 },
+        { d: 29.5, r: 1.75 },
+      ],
+      opacity: 40,
+    };
+    const file = serializeProject(model, { overlay });
+    expect(file.overlay.name).toBe('leg-reference-photo.dxf');
+    expect(file.overlay.points).toHaveLength(3);
+    const loaded = deserializeProject(file, bits);
+    expect(loaded.overlay.opacity).toBe(40);
+    expect(loaded.overlay.points[1].r).toBe(1.2);
+  });
+
   it('round-trips a run; omits idle ends when run is off', () => {
     const running = {
       ...model,

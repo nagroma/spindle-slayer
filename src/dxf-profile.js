@@ -158,6 +158,115 @@ function dedupeConsecutive(points, eps = 1e-9) {
 }
 
 /**
+ * Sketch coordinates: d = DXF X, r = DXF Y (before axis remap).
+ * One chain per entity so overlay import can reverse a chain to avoid chord jumps.
+ * @param {string} dxfText
+ * @returns {ProfilePoint[][]}
+ */
+function parseDxfSketchChains(dxfText, opts = {}) {
+  const tags = parseDxfTags(dxfText);
+  const entities = extractEntities(tags);
+  const arcSamples = opts.arcSamples ?? 24;
+
+  /** @type {ProfilePoint[][]} */
+  const chains = [];
+  /** @type {ProfilePoint[] | null} */
+  let polyline = null;
+  /** @param {ProfilePoint[] | null | undefined} pts */
+  const pushChain = (pts) => {
+    if (pts && pts.length) chains.push(pts);
+  };
+
+  for (const entity of entities) {
+    if (entity.type === 'POLYLINE') {
+      pushChain(polyline);
+      polyline = [];
+      continue;
+    }
+    if (entity.type === 'VERTEX') {
+      if (!polyline) polyline = [];
+      polyline.push({ d: num(entity.tags, 10), r: num(entity.tags, 20) });
+      continue;
+    }
+    if (entity.type === 'SEQEND') {
+      pushChain(polyline);
+      polyline = null;
+      continue;
+    }
+    if (entity.type === 'LWPOLYLINE') {
+      const xs = nums(entity.tags, 10);
+      const ys = nums(entity.tags, 20);
+      const n = Math.min(xs.length, ys.length);
+      /** @type {ProfilePoint[]} */
+      const pts = [];
+      for (let i = 0; i < n; i++) pts.push({ d: xs[i], r: ys[i] });
+      pushChain(pts);
+      continue;
+    }
+    if (entity.type === 'LINE') {
+      pushChain([
+        { d: num(entity.tags, 10), r: num(entity.tags, 20) },
+        { d: num(entity.tags, 11), r: num(entity.tags, 21) },
+      ]);
+      continue;
+    }
+    if (entity.type === 'ARC') {
+      pushChain(sampleArc(entity, arcSamples));
+      continue;
+    }
+    if (entity.type === 'SPLINE') {
+      pushChain(sampleSpline(entity));
+      continue;
+    }
+    if (entity.type === 'ENDSEC' || entity.type === 'ENDBLK') continue;
+    throw new Error(`Unsupported DXF entity type "${entity.type}" in profile.`);
+  }
+  pushChain(polyline);
+  if (!chains.length) throw new Error('DXF profile contained no geometry.');
+  return chains;
+}
+
+/** @param {ProfilePoint} a @param {ProfilePoint} b */
+function sketchDist2(a, b) {
+  return (a.d - b.d) ** 2 + (a.r - b.r) ** 2;
+}
+
+/**
+ * Join entity samples into one polyline. Reverse a chain when that meets the
+ * previous end — otherwise an ARC stored start-at-the-far-end draws its chord.
+ * @param {ProfilePoint[][]} chains
+ */
+function stitchSketchChains(chains) {
+  /** @type {ProfilePoint[]} */
+  const out = [];
+  for (const raw of chains) {
+    if (!raw.length) continue;
+    let chain = raw;
+    if (out.length) {
+      const last = out[out.length - 1];
+      if (sketchDist2(last, chain[chain.length - 1]) < sketchDist2(last, chain[0])) {
+        chain = chain.slice().reverse();
+      }
+    } else {
+      out.push(...chain);
+      continue;
+    }
+    const last = out[out.length - 1];
+    const skip = sketchDist2(last, chain[0]) < 1e-12 ? 1 : 0;
+    for (let i = skip; i < chain.length; i++) out.push(chain[i]);
+  }
+  return out.length ? dedupeConsecutive(out) : [];
+}
+
+function parseDxfSketchPoints(dxfText) {
+  return dedupeConsecutive(parseDxfSketchChains(dxfText).flat());
+}
+
+function clampRadius(points) {
+  return points.map((p) => ({ d: p.d, r: Math.max(0, p.r) }));
+}
+
+/**
  * Parse a DXF whose sketched (x, y) is the bit half-profile, tip at (0,0).
  * dAxis: 'x' (default, x along the bit), 'y' (y along the bit), or 'auto'
  * (pick the mapping where the first step off the tip is mostly radius —
@@ -167,61 +276,9 @@ function dedupeConsecutive(points, eps = 1e-9) {
  * @returns {ProfilePoint[]}
  */
 export function importDxfProfile(dxfText, opts = {}) {
-  const tags = parseDxfTags(dxfText);
-  const entities = extractEntities(tags);
-
-  let points = [];
-  /** @type {ProfilePoint[] | null} */
-  let polyline = null;
-
-  for (const entity of entities) {
-    if (entity.type === 'POLYLINE') {
-      if (polyline && polyline.length) points = points.concat(polyline);
-      polyline = [];
-      continue;
-    }
-    if (entity.type === 'VERTEX') {
-      if (!polyline) polyline = [];
-      polyline.push({
-        d: num(entity.tags, 10),
-        r: Math.max(0, num(entity.tags, 20)),
-      });
-      continue;
-    }
-    if (entity.type === 'SEQEND') {
-      if (polyline && polyline.length) points = points.concat(polyline);
-      polyline = null;
-      continue;
-    }
-    if (entity.type === 'LWPOLYLINE') {
-      const xs = nums(entity.tags, 10);
-      const ys = nums(entity.tags, 20);
-      const n = Math.min(xs.length, ys.length);
-      for (let i = 0; i < n; i++) points.push({ d: xs[i], r: Math.max(0, ys[i]) });
-      continue;
-    }
-    if (entity.type === 'LINE') {
-      points.push({ d: num(entity.tags, 10), r: Math.max(0, num(entity.tags, 20)) });
-      points.push({ d: num(entity.tags, 11), r: Math.max(0, num(entity.tags, 21)) });
-      continue;
-    }
-    if (entity.type === 'ARC') {
-      points = points.concat(sampleArc(entity));
-      continue;
-    }
-    if (entity.type === 'SPLINE') {
-      points = points.concat(sampleSpline(entity));
-      continue;
-    }
-    if (entity.type === 'ENDSEC' || entity.type === 'ENDBLK') continue;
-    throw new Error(`Unsupported DXF entity type "${entity.type}" in profile.`);
-  }
-  if (polyline && polyline.length) points = points.concat(polyline);
-
-  if (!points.length) throw new Error('DXF profile contained no geometry.');
-
-  points = dedupeConsecutive(points);
+  let points = parseDxfSketchPoints(dxfText);
   points = orientProfile(points, opts.dAxis ?? 'x');
+  points = clampRadius(points);
   // Keep sketch order. A shank/undercut can go slightly backward in d;
   // sorting would scramble the cutting shape versus the drawn bit.
 
@@ -242,6 +299,17 @@ export function importDxfProfile(dxfText, opts = {}) {
 }
 
 /**
+ * Traced spindle (or any half-profile that is not a bit tip at 0,0).
+ * Longer sketch axis becomes length along the blank; the other is radius.
+ * Trace DXF uses X = radius, Y = along the axis.
+ * @param {string} dxfText
+ * @returns {ProfilePoint[]}
+ */
+export function importDxfOverlay(dxfText) {
+  return clampRadius(orientOverlay(stitchSketchChains(parseDxfSketchChains(dxfText, { arcSamples: 48 }))));
+}
+
+/**
  * DXF (x, y) is stored as {d: x, r: y} until this remaps.
  * @param {ProfilePoint[]} points
  * @param {'x' | 'y' | 'auto'} dAxis
@@ -257,6 +325,24 @@ function orientProfile(points, dAxis) {
     axis = p && Math.abs(p.d) >= Math.abs(p.r) ? 'y' : 'x';
   }
   if (axis === 'y') {
+    return points.map((p) => ({ d: p.r, r: p.d }));
+  }
+  return points;
+}
+
+/** Longer sketch axis is length along the blank; the other is radius from the centerline. */
+function orientOverlay(points) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.d);
+    maxX = Math.max(maxX, p.d);
+    minY = Math.min(minY, p.r);
+    maxY = Math.max(maxY, p.r);
+  }
+  if (maxY - minY >= maxX - minX) {
     return points.map((p) => ({ d: p.r, r: p.d }));
   }
   return points;

@@ -36,10 +36,22 @@ Do **not** rewrite every markdown file. Patch only what changed:
 - Bits only subtract. Library = `bits/*.dxf` (tip at 0,0). Display name = filename.
 - UI field is **diameter at tip** (`2 × circular distance`). A shallow nick on fat square/hex stock is correct.
 - Adding or selecting a bit must **not** change 2D zoom. New bit lands at the length in the center of the current 2D view.
-- Planner UI: `src/main.js`, `geometry.js`, `view-side.js`, `view3d.js`, `persist.js`, `demo-bits.js`. `recipe.js` / `bits.js` / `view2d.js` are leftover experiments.
+- Planner UI: `src/main.js`, `geometry.js`, `view-side.js`, `view3d.js`, `persist.js`, `demo-bits.js`. `recipe.js` / `bits.js` / `view2d.js` are leftover experiments. `trace.html` + `src/trace/` is the Trace page (photo → DXF). Load that DXF as a 2D overlay in the planner; it does not cut wood.
 
 ## Style
 
 - Ask if a new idea would break a hard requirement.
 - Do not build the README “Later” list unless asked.
 - Prefer small, testable geometry changes; `npm test` (Vitest).
+
+## Before every commit
+
+Scan **staged** files (and the commit author line) before `git commit`. Do this even if the user did not mention security.
+
+Look for:
+
+- Secrets: `.env`, API keys, tokens, passwords, private keys, cloud credentials
+- Personal data: emails, phone numbers, home paths (`C:\Users\...`), names, screenshots with EXIF/GPS
+- Accidental local-only files
+
+If anything matches, **stop**. Do not commit it. Tell the user what was found and ask. Also warn if `git log` would publish a personal author email they did not mean to put on GitHub.

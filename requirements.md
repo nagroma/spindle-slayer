@@ -58,14 +58,14 @@ These are “this seems like a good direction right now,” not frozen.
 ### Product shape
 
 - Static Vite + vanilla JS + Three.js, offline-capable. No React.
-- Shop-floor recipe text / mill export is later. The project JSON is the designer’s file, not a substitute for that export.
+- Shop-floor recipe text / mill export is later (low priority). The project JSON is the designer’s file, not a substitute for that export.
 - First-time empty session still opens on a **demo** (3.5″ × 34″ square, Magnate_7593 at 4″ from headstock, 3.00″ diameter at tip) so the views are not blank.
 
 ### Bits pipeline
 
 - Today each `bits/*.dxf` is imported when the app loads (Vite glob in dev/build). Reloading the app (and rebuilding for a shipped `dist/`) is how a new file appears.
 - DXF sketches in `bits/` use **Y along the bit axis** and **X as radius**; import **auto-detects** that. The older millimetre reference DXF in `reference/` is a different convention.
-- A processed on-disk cache of profiles, picking a subset of bits to show, and a full bit-management UI are later. Until then: `bits/` is the source of truth.
+- A processed on-disk cache of profiles, picking a subset of bits to show, and a full bit-management UI are medium (favorites, hide, names that are not filenames). Until then: `bits/` is the source of truth. Display name stays the filename.
 - JSON for projects, not YAML.
 
 ### What is stored where
@@ -84,20 +84,28 @@ These are “this seems like a good direction right now,” not frozen.
 
 - Compact bit chips (icon + filename) in the top bar; compact cut list on the left with the typed headstock/diameter fields under it.
 - A cut can be **hidden** (still in the list, ignored in remaining wood) without deleting it. Undoable.
-- 2D: mouse wheel zooms (pinned left), shift+wheel scrolls along the blank, drag empty space to scroll up/down, +/− and Fit 2D buttons.
+- 2D: mouse wheel zooms (pinned left), shift+wheel scrolls along the blank, drag empty space to scroll up/down, +/− and Fit 2D buttons. Left-pin is still a trial; keep using it until we decide to keep or revert.
 - 2D remaining wood is the blank minus the bit’s 2D solid (and the opposite side after a revolution), so the hole follows the bit where they overlap.
 - 3D: headstock at the **top**; default view fills the pane at a slight three-quarter tilt. Left-right drag **spins around the spindle**; drag up/down to flip the piece over. Lights stay world-fixed.
 - Pane splitter defaults and minimum widths are a starting point; users override them.
 - Bit count is expected in the **low tens**, not hundreds.
 
+### Photo overlay and tracing (high)
+
+- Recreating a spindle from a picture is the real need (not a pretty JPEG behind the stock).
+- **Interactive tracer** is a second page (`trace.html`): click the edge, fit lines/arcs/splines, snap a known radius, merge pieces into one bit, export DXF. Photo opacity is adjustable. Sessions save as `.ltrace`. Same loop for **bit** half-profiles. Stay on bit-matching (join / type / known radius), not CAD handles. Later: constrain each segment to a real bit half-profile (a cut from the side), and treat fit direction per segment rather than as a whole-trace toggle.
+- **2D overlay**: load a traced spindle DXF behind the planner profile (inches, headstock at the top). It stays visible while placing bits. An opacity slider fades it. The overlay is a reference only — it does not cut wood. It is stored in the session and in `.lomp`. A raw photo behind the 2D stock is still possible later. Phone photos are perspective; do not squash them into the stock rectangle.
+
+- While building photo tools, keep short notes: `docs/photo-overlay-notes.md`. A prepared (but clipped) test crop is `reference/leg-overlay-3.5x29.5.png`.
+
 ### Explicitly later (not in current scope)
 
-- Flute / spiral / indexed-cut UI.
-- Photo overlay, image-to-profile, and building a bit from a definition plus a picture.
-- Better bit display names (characters that cannot be filenames).
-- Taper as its own cut.
-- Full bit-management (hide, favorite, recut from DXF cache, conflict UI).
-- Shop recipe / setup sheet export.
+- Flute / spiral / indexed-cut UI (high, after photo overlay).
+- In-app photo scaler (medium, only if overlay needs it).
+- Better bit display names and full bit-management (medium).
+- Taper as its own cut — **deferred**. Current run/taper matches the mill well enough.
+- Shop recipe / setup sheet export (low).
+- Auto-deploy from GitHub (low; not a product feature).
 
 ---
 

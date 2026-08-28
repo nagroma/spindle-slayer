@@ -7,7 +7,7 @@ describe('bits/ DXF library', () => {
 
   it('loads Magnate and endmill DXFs as named bits', () => {
     const ids = bits.map((b) => b.id).sort();
-    expect(ids).toEqual(['Endmill_1_2', 'Magnate_7533', 'Magnate_7593', 'Magnate_803']);
+    expect(ids).toEqual(['Endmill_1_2', 'Magnate 7554', 'Magnate_7533', 'Magnate_7593', 'Magnate_803']);
   });
 
   it('names bits from the filename (no extension)', () => {

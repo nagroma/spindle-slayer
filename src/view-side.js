@@ -276,14 +276,78 @@ function remainingOutline(xs, rs) {
 }
 
 /**
+ * Split a half-profile where the DXF left a gap so we do not draw a chord across it.
+ * @param {{ d: number, r: number }[]} points
+ * @param {number} [maxJoin]
+ */
+export function overlayConnectedRuns(points, maxJoin = 0.25) {
+  if (!points || points.length < 2) return [];
+  /** @type {{ d: number, r: number }[][]} */
+  const runs = [];
+  /** @type {{ d: number, r: number }[]} */
+  let run = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    const step = Math.hypot(points[i].d - points[i - 1].d, points[i].r - points[i - 1].r);
+    if (step > maxJoin) {
+      if (run.length >= 2) runs.push(run);
+      run = [points[i]];
+    } else {
+      run.push(points[i]);
+    }
+  }
+  if (run.length >= 2) runs.push(run);
+  return runs;
+}
+
+/**
+ * Closed target silhouette from a traced half-profile (d along blank, r from axis).
+ * @param {{ d: number, r: number }[]} points
+ */
+export function overlaySilhouettePath(points) {
+  const runs = overlayConnectedRuns(points);
+  return runs
+    .map((run) => {
+      const right = run.map((p) => `${p.r} ${p.d}`);
+      const left = [...run].reverse().map((p) => `${-p.r} ${p.d}`);
+      return `M ${right.join(' L ')} L ${left.join(' L ')} Z`;
+    })
+    .join(' ');
+}
+
+/**
+ * Left and right target outlines (no fill) so the edge stays visible over remaining wood.
+ * @param {{ d: number, r: number }[]} points
+ */
+export function overlayOutlinePath(points) {
+  const runs = overlayConnectedRuns(points);
+  return runs
+    .map((run) => {
+      const right = run.map((p) => `${p.r} ${p.d}`).join(' L ');
+      const left = [...run].reverse().map((p) => `${-p.r} ${p.d}`).join(' L ');
+      return `M ${right} M ${left}`;
+    })
+    .join(' ');
+}
+
+/**
  * @param {Model} model
- * @param {{ selectedId?: string | null, width?: number, height?: number, viewBox?: ViewBox }} [opts]
+ * @param {{ selectedId?: string | null, width?: number, height?: number, viewBox?: ViewBox, overlay?: { points: { d: number, r: number }[], opacity?: number } | null }} [opts]
  */
 export function renderSideSVG(model, opts = {}) {
   const { selectedId = null, width = 420, height = 720 } = opts;
   const { stock } = model;
   const vb = opts.viewBox ?? defaultViewBox(model, width, height);
   const stockPath = stockSilhouettePath(stock);
+  const overlay = opts.overlay?.points?.length >= 2 ? opts.overlay : null;
+  const op = overlay ? Math.max(0, Math.min(1, (overlay.opacity ?? 55) / 100)) : 0;
+  const overlayFill =
+    overlay && op > 0
+      ? `<g class="overlay" opacity="${op}" pointer-events="none"><path class="overlay-fill" d="${overlaySilhouettePath(overlay.points)}" /></g>`
+      : '';
+  const overlayEdge =
+    overlay && op > 0
+      ? `<g class="overlay-edge" opacity="${op}" pointer-events="none"><path class="overlay-line" d="${overlayOutlinePath(overlay.points)}" /></g>`
+      : '';
 
   const bits = model.placements
     .filter((p) => !isCutHidden(p))
@@ -316,7 +380,9 @@ export function renderSideSVG(model, opts = {}) {
     `width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet">` +
     `<rect class="bg" x="${vb.xMin}" y="${vb.yMin}" width="${vb.width}" height="${vb.height}" />` +
     `<path class="stock-ghost" d="${stockPath}" />` +
+    overlayFill +
     `<path class="remaining" d="${remainingSilhouettePath(model)}" />` +
+    overlayEdge +
     `<line class="centerline" x1="0" y1="0" x2="0" y2="${stock.length}" />` +
     bits +
     `</svg>`

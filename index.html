@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Legacy 1200 - spindle preview</title>
+  <title>Spindle Slayer Planner</title>
   <meta name="lomp-save" content="browser-save-as-v6" />
   <style>
     :root {
@@ -26,15 +26,21 @@
     }
     header {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       gap: 12px;
       flex-wrap: wrap;
       padding: 8px 12px 6px;
       border-bottom: 1px solid var(--line);
     }
     header h1 { font-size: 15px; margin: 0; font-weight: 600; }
-    header .file-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+    header .header-titles { display: flex; flex-direction: column; gap: 2px; }
+    header .note { font-size: 12px; color: var(--muted); }
+    header .file-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    header .file-actions .page-link { margin-right: 4px; }
+    header a.page-link { color: var(--accent); font-size: 13px; text-decoration: none; }
+    header a.page-link:hover { color: var(--ink); }
     header .project-name { font-size: 12px; color: var(--muted); max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    header .project-name:empty { display: none; }
     .toolbar {
       display: flex;
       align-items: flex-start;
@@ -65,15 +71,17 @@
       font-size: 13px;
       width: 7.5rem;
     }
-    button.ghost {
+    button.ghost, a.ghost {
       background: transparent;
       color: var(--muted);
       border: 1px solid var(--line);
       border-radius: 6px;
       padding: 5px 10px;
       cursor: pointer;
+      text-decoration: none;
+      font-size: 13px;
     }
-    button.ghost:hover { color: var(--ink); }
+    button.ghost:hover, a.ghost:hover { color: var(--ink); }
     button.danger {
       background: transparent;
       color: #c97a6a;
@@ -280,6 +288,8 @@
     #runFields[hidden] { display: none; }
     .view-tools {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 6px;
       padding: 6px 10px;
       border-bottom: 1px solid var(--line);
@@ -287,6 +297,29 @@
     }
     .view-tools button#btnZoomIn,
     .view-tools button#btnZoomOut { min-width: 2rem; padding-left: 0; padding-right: 0; font-size: 16px; }
+    .view-tools .overlay-op {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .view-tools .overlay-op[hidden] { display: none; }
+    .view-tools input[type="range"] {
+      width: 6.5rem;
+      padding: 0;
+      accent-color: var(--accent);
+    }
+    .view-tools .overlay-name {
+      font-size: 11px;
+      color: var(--muted);
+      max-width: 9rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     #side-wrap, #three-wrap {
       flex: 1;
       min-height: 0;
@@ -305,6 +338,11 @@
     #side-wrap svg .stock-ghost {
       fill: none; stroke: #5a5348;
       stroke-width: 1; stroke-dasharray: 5 4;
+      vector-effect: non-scaling-stroke;
+    }
+    #side-wrap svg .overlay-fill { fill: #c99a5f; fill-opacity: 0.18; stroke: none; }
+    #side-wrap svg .overlay-line {
+      fill: none; stroke: #e8c48a; stroke-width: 1.6;
       vector-effect: non-scaling-stroke;
     }
     #side-wrap svg .remaining { fill: #c99a5f; fill-opacity: 0.92; stroke: #8a6a3a; stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -337,8 +375,12 @@
 </head>
 <body>
   <header>
-    <h1>Legacy 1200 - spindle preview</h1>
+    <div class="header-titles">
+      <h1>Spindle Slayer Planner</h1>
+      <span class="note">Place bits on a blank and see remaining wood.</span>
+    </div>
     <div class="file-actions">
+      <a class="page-link" href="/trace.html">Trace</a>
       <span class="project-name" id="projectName"></span>
       <button class="ghost" id="btnOpen" type="button">Open</button>
       <button class="ghost" id="btnSaveLomp" type="button">Save</button>
@@ -400,6 +442,12 @@
         <button class="ghost" id="btnZoomIn" type="button" title="Zoom in">+</button>
         <button class="ghost" id="btnZoomOut" type="button" title="Zoom out">−</button>
         <button class="ghost" id="btnFit" type="button">Fit 2D</button>
+        <button class="ghost" id="btnOverlay" type="button" title="Load a traced spindle DXF behind the 2D view">Overlay DXF</button>
+        <button class="ghost" id="btnOverlayClear" type="button" hidden>Clear overlay</button>
+        <label class="overlay-op" id="overlayOpWrap" hidden>Fade
+          <input id="overlayOpacity" type="range" min="0" max="100" value="55" />
+        </label>
+        <span class="overlay-name" id="overlayName"></span>
       </div>
       <div id="side-wrap"><span class="hint">wheel zoom · shift+wheel scroll · drag up/down</span></div>
     </section>
@@ -410,6 +458,7 @@
     </section>
   </div>
   <input id="fileOpen" type="file" accept=".lomp,.json,.txt,text/plain" hidden />
+  <input id="fileOverlay" type="file" accept=".dxf,image/vnd.dxf" hidden />
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

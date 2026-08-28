@@ -1,5 +1,5 @@
 # Next session
 
-2D left-pin is a trial. If zoom/scroll along the blank feels wrong, put free left/right pan back.
+Nothing queued.
 
-Nothing else queued.
+2D left-pin still needs a keep-or-revert decision. If Overlay DXF still shows chords after **Clear overlay** and loading the file again, the stitch missed them.
