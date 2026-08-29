@@ -137,6 +137,38 @@ describe('project JSON', () => {
     expect(loaded.model.placements[0].profile.type).toBe('flute');
   });
 
+  it('round-trips a spiral / pineapple cut', () => {
+    const running = {
+      ...model,
+      placements: [
+        {
+          ...model.placements[0],
+          run: true,
+          endAtLength: 25,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 2,
+          spiralTurns: 1,
+          spiralStarts: 4,
+          spiralStartDeg: 15,
+          spiralDir: 'both',
+        },
+      ],
+    };
+    const file = serializeProject(running);
+    expect(file.cuts[0].spiral).toBe(true);
+    expect(file.cuts[0].spiralTravel).toBe(2);
+    expect(file.cuts[0].spiralTurns).toBe(1);
+    expect(file.cuts[0].spiralStarts).toBe(4);
+    expect(file.cuts[0].spiralStartDeg).toBe(15);
+    expect(file.cuts[0].spiralDir).toBe('both');
+    const loaded = deserializeProject(file, bits);
+    expect(loaded.model.placements[0].spiral).toBe(true);
+    expect(loaded.model.placements[0].spiralStarts).toBe(4);
+    expect(loaded.model.placements[0].spiralTravel).toBe(2);
+    expect(loaded.model.placements[0].spiralDir).toBe('both');
+  });
+
   it('round-trips a 2D overlay profile', () => {
     const overlay = {
       name: 'leg-reference-photo.dxf',

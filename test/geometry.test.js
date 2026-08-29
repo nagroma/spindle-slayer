@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { radiusAt, MIN_RADIUS, faceRadiusAt, isRun, isCutHidden, bakeCutRadii, remainingFromCut, fluteIndexAngles, isFlute, sampleStations } from '../src/geometry.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { radiusAt, MIN_RADIUS, faceRadiusAt, isRun, isCutHidden, bakeCutRadii, remainingFromCut, fluteIndexAngles, isFlute, isSpiral, sampleStations, spiralTwistDeg, grooveAnglesAt, indexDegToStarts, startsToIndexDeg, bakeGrooveGrid } from '../src/geometry.js';
 import { stockRadius } from '../src/stock.js';
+import { importDxfProfile } from '../src/dxf-profile.js';
 
 // Pommel truth-test from the operating model:
 // 3.5" square × 34", ball-nose R 1", tip 1.5" from centerline at 4" from headstock.
@@ -262,5 +265,238 @@ describe('indexed flute', () => {
     const coarse = sampleStations(model, { dense: false, flutePerInch: 8 });
     const fine = sampleStations(model, { dense: true, perInch: 24, perInchMax: 960, flutePerInch: 56 });
     expect(fine.length).toBeGreaterThan(coarse.length);
+  });
+});
+
+describe('spiral / pineapple helix', () => {
+  it('treats 4 starts as 90° and 90° as 4 starts', () => {
+    expect(startsToIndexDeg(4)).toBe(90);
+    expect(indexDegToStarts(90)).toBe(4);
+    expect(indexDegToStarts(20)).toBe(18);
+  });
+
+  it('2:1 ratio is 2 inches of travel per turn (180° per inch)', () => {
+    const p = {
+      id: 's1',
+      bitId: 'x',
+      profile: { type: 'round', r: 0.5 },
+      atLength: 10,
+      circularDistance: 1.5,
+      run: true,
+      endAtLength: 18,
+      endCircularDistance: 1.5,
+      spiral: true,
+      spiralTravel: 2,
+      spiralTurns: 1,
+      spiralStarts: 1,
+    };
+    expect(isSpiral(p)).toBe(true);
+    expect(spiralTwistDeg(p, 10)).toBeCloseTo(0, 10);
+    expect(spiralTwistDeg(p, 12)).toBeCloseTo(360, 10);
+    expect(grooveAnglesAt(p, 11)[0]).toBeCloseTo(180, 10);
+  });
+
+  it('pineapple: flute groove follows the helix, not a straight index', () => {
+    const model = fluteModel({
+      spiral: true,
+      spiralTravel: 4,
+      spiralTurns: 1,
+      spiralStarts: 1,
+      spiralStartDeg: 0,
+    });
+    // 4″ per turn → 90° per inch. At x=8 start, groove at 0°. At x=10, groove at 180°.
+    expect(radiusAt(model, 8, 0)).toBeCloseTo(1.5, 5);
+    expect(radiusAt(model, 8, 180)).toBeCloseTo(1.75, 5);
+    expect(radiusAt(model, 10, 180)).toBeCloseTo(1.5, 5);
+    expect(radiusAt(model, 10, 0)).toBeCloseTo(1.75, 5);
+    expect(faceRadiusAt(model, 10)).toBeCloseTo(1.75, 8);
+  });
+
+  it('pineapple with 4 starts cuts every 90° on the helix', () => {
+    const model = fluteModel({
+      spiral: true,
+      spiralTravel: 4,
+      spiralTurns: 1,
+      spiralStarts: 4,
+      spiralStartDeg: 0,
+    });
+    expect(radiusAt(model, 8, 0)).toBeCloseTo(1.5, 5);
+    expect(radiusAt(model, 8, 90)).toBeCloseTo(1.5, 5);
+    expect(radiusAt(model, 8, 45)).toBeCloseTo(1.75, 5);
+  });
+
+  it('barley twist: plunge bit wraps; 2D silhouette stays the turned envelope', () => {
+    const model = {
+      stock: { type: 'round', length: 24, size: 3 },
+      placements: [
+        {
+          id: 's1',
+          bitId: 'round-half',
+          profile: { type: 'round', r: 0.5 },
+          atLength: 6,
+          circularDistance: 1.25,
+          run: true,
+          endAtLength: 14,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 4,
+          spiralTurns: 1,
+          spiralStarts: 1,
+          spiralStartDeg: 0,
+        },
+      ],
+    };
+    expect(isSpiral(model.placements[0])).toBe(true);
+    expect(isFlute(model.placements[0])).toBe(false);
+    expect(radiusAt(model, 6, 0)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(model, 6, 180)).toBeCloseTo(1.5, 5);
+    expect(radiusAt(model, 8, 180)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(model, 8, 0)).toBeCloseTo(1.5, 5);
+    expect(faceRadiusAt(model, 8)).toBeCloseTo(1.5, 8);
+  });
+
+  it('does not revolve a spiral plunge the way a ring would', () => {
+    const ring = {
+      stock: { type: 'round', length: 12, size: 3 },
+      placements: [
+        {
+          id: 'p1',
+          bitId: 'round-half',
+          profile: { type: 'round', r: 0.5 },
+          atLength: 4,
+          circularDistance: 1.25,
+        },
+      ],
+    };
+    const wrap = {
+      ...ring,
+      placements: [
+        {
+          ...ring.placements[0],
+          run: true,
+          endAtLength: 10,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 4,
+          spiralTurns: 1,
+          spiralStarts: 1,
+        },
+      ],
+    };
+    expect(radiusAt(ring, 4, 0)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(ring, 4, 180)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(wrap, 4, 0)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(wrap, 4, 180)).toBeCloseTo(1.5, 5);
+  });
+
+  it('ccw helix is the opposite of cw', () => {
+    const p = {
+      id: 's1',
+      bitId: 'x',
+      profile: { type: 'round', r: 0.5 },
+      atLength: 10,
+      circularDistance: 1.5,
+      run: true,
+      endAtLength: 18,
+      endCircularDistance: 1.5,
+      spiral: true,
+      spiralTravel: 2,
+      spiralTurns: 1,
+      spiralStarts: 1,
+      spiralDir: 'ccw',
+    };
+    expect(spiralTwistDeg(p, 12)).toBeCloseTo(-360, 10);
+    expect(grooveAnglesAt(p, 11)[0]).toBeCloseTo(-180, 10);
+  });
+
+  it('both ways cuts the cw and ccw helices (barley twist)', () => {
+    const model = {
+      stock: { type: 'round', length: 24, size: 3 },
+      placements: [
+        {
+          id: 's1',
+          bitId: 'round-half',
+          profile: { type: 'round', r: 0.5 },
+          atLength: 6,
+          circularDistance: 1.25,
+          run: true,
+          endAtLength: 14,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 4,
+          spiralTurns: 1,
+          spiralStarts: 1,
+          spiralStartDeg: 0,
+          spiralDir: 'both',
+        },
+      ],
+    };
+    // 4″/turn → 90° per inch. At x=7, cw is 90° and ccw is −90°.
+    expect(radiusAt(model, 7, 90)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(model, 7, -90)).toBeCloseTo(1.25, 5);
+    expect(radiusAt(model, 7, 0)).toBeCloseTo(1.5, 5);
+  });
+
+  it('bakes a Fast barley-twist grid without hanging', () => {
+    const model = {
+      stock: { type: 'round', length: 24, size: 3 },
+      placements: [
+        {
+          id: 's1',
+          bitId: 'round-half',
+          profile: { type: 'round', r: 0.5 },
+          atLength: 2,
+          circularDistance: 1.25,
+          run: true,
+          endAtLength: 22,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 2,
+          spiralTurns: 1,
+          spiralStarts: 4,
+          spiralStartDeg: 0,
+          spiralDir: 'both',
+        },
+      ],
+    };
+    const xs = [];
+    for (let i = 0; i <= 96; i++) xs.push((24 * i) / 96);
+    const t0 = performance.now();
+    const grid = bakeGrooveGrid(model, xs, 96, 2);
+    expect(performance.now() - t0).toBeLessThan(1500);
+    expect(grid.length).toBe(xs.length * 97);
+    expect(Math.min(...grid)).toBeLessThan(1.4);
+  });
+
+  it('bakes a Magnate 7554 barley grid without hanging', () => {
+    const dxf = readFileSync(fileURLToPath(new URL('../bits/Magnate 7554.dxf', import.meta.url)), 'utf8');
+    const points = importDxfProfile(dxf, { dAxis: 'auto' });
+    const model = {
+      stock: { type: 'round', length: 24, size: 3 },
+      placements: [
+        {
+          id: 's1',
+          bitId: 'Magnate 7554',
+          profile: { type: 'points', points },
+          atLength: 2,
+          circularDistance: 1.25,
+          run: true,
+          endAtLength: 22,
+          endCircularDistance: 1.25,
+          spiral: true,
+          spiralTravel: 2,
+          spiralTurns: 1,
+          spiralStarts: 4,
+          spiralStartDeg: 0,
+          spiralDir: 'both',
+        },
+      ],
+    };
+    const xs = [];
+    for (let i = 0; i <= 80; i++) xs.push((24 * i) / 80);
+    const t0 = performance.now();
+    const grid = bakeGrooveGrid(model, xs, 96, 2);
+    expect(performance.now() - t0).toBeLessThan(2000);
+    expect(Math.min(...grid)).toBeLessThan(1.5);
   });
 });

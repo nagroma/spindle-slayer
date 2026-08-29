@@ -198,3 +198,62 @@ export function profileMaxDepth(profile) {
   if (profile.type === 'v') return 1;
   return Math.max(...profile.points.map((p) => p.d));
 }
+
+/**
+ * Throws if the profile shape is invalid.
+ * @param {BitProfile} profile
+ */
+export function validateBitProfile(profile) {
+  if (!profile || typeof profile !== 'object') {
+    throw new Error('Bit profile is required.');
+  }
+  if (profile.type === 'round') {
+    if (!(typeof profile.r === 'number' && profile.r >= 0 && Number.isFinite(profile.r))) {
+      throw new Error('Round bit profile needs a radius (r) that is a non-negative number.');
+    }
+    return;
+  }
+  if (profile.type === 'v') {
+    if (!(typeof profile.angleDeg === 'number' && profile.angleDeg > 0 && profile.angleDeg < 180)) {
+      throw new Error('V bit profile needs an included angle (angleDeg) between 0 and 180.');
+    }
+    return;
+  }
+  if (profile.type === 'flat') {
+    if (!(typeof profile.r === 'number' && profile.r > 0 && Number.isFinite(profile.r))) {
+      throw new Error('Flat bit profile needs a radius (r) that is a positive number.');
+    }
+    return;
+  }
+  if (profile.type === 'points') {
+    const pts = profile.points;
+    if (!(Array.isArray(pts) && pts.length >= 2)) {
+      throw new Error('Points profile needs an array of at least two {d, r} points.');
+    }
+    for (const p of pts) {
+      if (!(typeof p.d === 'number' && typeof p.r === 'number' && p.r >= 0)) {
+        throw new Error('Every profile point needs numeric d and a non-negative r.');
+      }
+    }
+    if (pts[0].d !== 0 || pts[0].r !== 0) {
+      throw new Error('Points profile must start at the tip, {d: 0, r: 0} — that\'s the circularDistance reference point.');
+    }
+    return;
+  }
+  if (profile.type === 'flute') {
+    const pts = profile.points;
+    if (!(Array.isArray(pts) && pts.length >= 2)) {
+      throw new Error('Flute profile needs an array of at least two {d, r} points.');
+    }
+    for (const p of pts) {
+      if (!(typeof p.d === 'number' && typeof p.r === 'number' && p.d >= 0 && p.r >= 0)) {
+        throw new Error('Every flute profile point needs non-negative numeric d and r.');
+      }
+    }
+    if (!(typeof profile.bearingRadius === 'number' && profile.bearingRadius >= 0 && Number.isFinite(profile.bearingRadius))) {
+      throw new Error('Flute profile needs a non-negative bearingRadius.');
+    }
+    return;
+  }
+  throw new Error(`Unknown bit profile type: ${profile.type}`);
+}

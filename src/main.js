@@ -2,7 +2,7 @@
 // Prism blank + plunge bits + live 2D/3D. 2D camera is independent of bit drag.
 
 import { defaultDemo } from './demo-bits.js';
-import { MIN_RADIUS, isRun, isCutHidden, isFlute, DEFAULT_FLUTE_INDEX_DEG } from './geometry.js';
+import { MIN_RADIUS, isRun, isCutHidden, isFlute, isSpiral, enableSpiral, disableSpiral, DEFAULT_FLUTE_INDEX_DEG, DEFAULT_SPIRAL_TRAVEL, DEFAULT_SPIRAL_TURNS } from './geometry.js';
 import { stockMaxRadius, stockFaceRadius } from './stock.js';
 import {
   renderSideSVG,
@@ -82,6 +82,12 @@ function recipeSnapshot() {
       endAtLength: p.endAtLength,
       endCircularDistance: p.endCircularDistance,
       indexIncrementDeg: p.indexIncrementDeg,
+      spiral: Boolean(p.spiral),
+      spiralTravel: p.spiralTravel,
+      spiralTurns: p.spiralTurns,
+      spiralStarts: p.spiralStarts,
+      spiralStartDeg: p.spiralStartDeg,
+      spiralDir: p.spiralDir,
     })),
   };
 }
@@ -138,6 +144,12 @@ function applyRecipe(snap) {
     if (c.endAtLength != null) p.endAtLength = c.endAtLength;
     if (c.endCircularDistance != null) p.endCircularDistance = c.endCircularDistance;
     if (c.indexIncrementDeg != null) p.indexIncrementDeg = c.indexIncrementDeg;
+    if (c.spiral) p.spiral = true;
+    if (c.spiralTravel != null) p.spiralTravel = c.spiralTravel;
+    if (c.spiralTurns != null) p.spiralTurns = c.spiralTurns;
+    if (c.spiralStarts != null) p.spiralStarts = c.spiralStarts;
+    if (c.spiralStartDeg != null) p.spiralStartDeg = c.spiralStartDeg;
+    if (c.spiralDir === 'cw' || c.spiralDir === 'ccw' || c.spiralDir === 'both') p.spiralDir = c.spiralDir;
     placements.push(p);
   }
   model.placements = placements;
@@ -203,6 +215,13 @@ const placeEndLengthEl = /** @type {HTMLInputElement} */ (document.getElementByI
 const placeEndDiaEl = /** @type {HTMLInputElement} */ (document.getElementById('placeEndDia'));
 const placeIndexEl = /** @type {HTMLInputElement} */ (document.getElementById('placeIndex'));
 const indexFieldEl = document.getElementById('indexField');
+const placeSpiralEl = /** @type {HTMLInputElement} */ (document.getElementById('placeSpiral'));
+const spiralFieldsEl = document.getElementById('spiralFields');
+const placeStartsEl = /** @type {HTMLInputElement} */ (document.getElementById('placeStarts'));
+const placeStartDegEl = /** @type {HTMLInputElement} */ (document.getElementById('placeStartDeg'));
+const placeSpiralTravelEl = /** @type {HTMLInputElement} */ (document.getElementById('placeSpiralTravel'));
+const placeSpiralTurnsEl = /** @type {HTMLInputElement} */ (document.getElementById('placeSpiralTurns'));
+const placeSpiralDirEl = /** @type {HTMLSelectElement} */ (document.getElementById('placeSpiralDir'));
 const placeDiaLabelEl = document.getElementById('placeDiaLabel');
 const placeEndDiaLabelEl = document.getElementById('placeEndDiaLabel');
 
@@ -477,6 +496,15 @@ placeEndDiaEl.addEventListener('input', () => applyPlaceEndDia(true));
 placeEndDiaEl.addEventListener('change', () => applyPlaceEndDia(false));
 placeIndexEl.addEventListener('input', () => applyPlaceIndex(true));
 placeIndexEl.addEventListener('change', () => applyPlaceIndex(false));
+placeStartsEl?.addEventListener('input', () => applyPlaceStarts(true));
+placeStartsEl?.addEventListener('change', () => applyPlaceStarts(false));
+placeStartDegEl?.addEventListener('input', () => applyPlaceStartDeg(true));
+placeStartDegEl?.addEventListener('change', () => applyPlaceStartDeg(false));
+placeSpiralTravelEl?.addEventListener('input', () => applyPlaceSpiralTravel(true));
+placeSpiralTravelEl?.addEventListener('change', () => applyPlaceSpiralTravel(false));
+placeSpiralTurnsEl?.addEventListener('input', () => applyPlaceSpiralTurns(true));
+placeSpiralTurnsEl?.addEventListener('change', () => applyPlaceSpiralTurns(false));
+placeSpiralDirEl?.addEventListener('change', () => applyPlaceSpiralDir());
 
 /** @param {HTMLInputElement} el */
 function armFieldUndo(el) {
@@ -495,6 +523,13 @@ armFieldUndo(placeDiaEl);
 armFieldUndo(placeEndLengthEl);
 armFieldUndo(placeEndDiaEl);
 armFieldUndo(placeIndexEl);
+if (placeStartsEl) armFieldUndo(placeStartsEl);
+if (placeStartDegEl) armFieldUndo(placeStartDegEl);
+if (placeSpiralTravelEl) armFieldUndo(placeSpiralTravelEl);
+if (placeSpiralTurnsEl) armFieldUndo(placeSpiralTurnsEl);
+placeSpiralDirEl?.addEventListener('focus', () => {
+  if (placeSpiralDirEl) placeSpiralDirEl.dataset.undoArmed = '1';
+});
 armFieldUndo(stockLengthEl);
 armFieldUndo(stockSizeEl);
 placeRunEl.addEventListener('change', () => {
@@ -510,6 +545,25 @@ placeRunEl.addEventListener('change', () => {
     }
   } else {
     p.run = false;
+    if (p.spiral) disableSpiral(p);
+  }
+  render({ rebuildSide: true });
+});
+
+placeSpiralEl?.addEventListener('change', () => {
+  const p = selectedPlacement();
+  if (!p) return;
+  pushUndo();
+  if (placeSpiralEl.checked) {
+    p.run = true;
+    if (p.endAtLength == null || p.endCircularDistance == null) {
+      const span = Math.min(6, Math.max(1, model.stock.length - p.atLength));
+      p.endAtLength = clamp(p.atLength + span, 0, model.stock.length);
+      p.endCircularDistance = p.circularDistance;
+    }
+    enableSpiral(p);
+  } else {
+    disableSpiral(p);
   }
   render({ rebuildSide: true });
 });
@@ -556,11 +610,64 @@ function applyPlaceEndDia(live) {
 /** @param {boolean} live */
 function applyPlaceIndex(live) {
   const p = selectedPlacement();
-  if (!p || !isFlute(p) || placeIndexEl.value === '') return;
+  if (!p || !isFlute(p) || isSpiral(p) || placeIndexEl.value === '') return;
   const n = Number(placeIndexEl.value);
   if (!Number.isFinite(n)) return;
   p.indexIncrementDeg = clamp(n, 1, 180);
   render({ live, rebuild3d: !live });
+}
+
+/** @param {boolean} live */
+function applyPlaceStarts(live) {
+  const p = selectedPlacement();
+  if (!p || !isSpiral(p) || !placeStartsEl || placeStartsEl.value === '') return;
+  const n = Number(placeStartsEl.value);
+  if (!Number.isFinite(n)) return;
+  p.spiralStarts = clamp(Math.round(n), 1, 36);
+  render({ live, rebuild3d: !live });
+}
+
+/** @param {boolean} live */
+function applyPlaceStartDeg(live) {
+  const p = selectedPlacement();
+  if (!p || !isSpiral(p) || !placeStartDegEl || placeStartDegEl.value === '') return;
+  const n = Number(placeStartDegEl.value);
+  if (!Number.isFinite(n)) return;
+  p.spiralStartDeg = n;
+  render({ live, rebuild3d: !live });
+}
+
+/** @param {boolean} live */
+function applyPlaceSpiralTravel(live) {
+  const p = selectedPlacement();
+  if (!p || !isSpiral(p) || !placeSpiralTravelEl || placeSpiralTravelEl.value === '') return;
+  const n = Number(placeSpiralTravelEl.value);
+  if (!Number.isFinite(n) || Math.abs(n) < 1e-9) return;
+  p.spiralTravel = n;
+  render({ live, rebuild3d: !live });
+}
+
+/** @param {boolean} live */
+function applyPlaceSpiralTurns(live) {
+  const p = selectedPlacement();
+  if (!p || !isSpiral(p) || !placeSpiralTurnsEl || placeSpiralTurnsEl.value === '') return;
+  const n = Number(placeSpiralTurnsEl.value);
+  if (!Number.isFinite(n)) return;
+  p.spiralTurns = n;
+  render({ live, rebuild3d: !live });
+}
+
+function applyPlaceSpiralDir() {
+  const p = selectedPlacement();
+  if (!p || !isSpiral(p) || !placeSpiralDirEl) return;
+  const v = placeSpiralDirEl.value;
+  if (v !== 'cw' && v !== 'ccw' && v !== 'both') return;
+  if (placeSpiralDirEl.dataset.undoArmed === '1') {
+    pushUndo();
+    placeSpiralDirEl.dataset.undoArmed = '0';
+  }
+  p.spiralDir = v;
+  render({ rebuild3d: true });
 }
 
 {
@@ -775,16 +882,20 @@ function renderPlacedList() {
       const hidden = isCutHidden(p);
       const run = isRun(p);
       const flute = isFlute(p);
-      const idx = flute ? ` · ${p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG}°` : '';
+      const wrap = isSpiral(p);
+      const idx = flute && !wrap ? ` · ${p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG}°` : '';
+      const spiralMeta = wrap
+        ? ` · ${p.spiralStarts ?? 1} start${(p.spiralStarts ?? 1) === 1 ? '' : 's'} · ${p.spiralTravel ?? DEFAULT_SPIRAL_TRAVEL}:${p.spiralTurns ?? DEFAULT_SPIRAL_TURNS} · ${p.spiralDir === 'both' ? 'both' : p.spiralDir === 'ccw' ? 'ccw' : 'cw'}`
+        : '';
       const meta = run
-        ? `${fmt(p.atLength)}–${fmt(/** @type {number} */ (p.endAtLength))}" · Ø${fmt(p.circularDistance * 2)}→${fmt(/** @type {number} */ (p.endCircularDistance) * 2)}${idx}`
+        ? `${fmt(p.atLength)}–${fmt(/** @type {number} */ (p.endAtLength))}" · Ø${fmt(p.circularDistance * 2)}→${fmt(/** @type {number} */ (p.endCircularDistance) * 2)}${idx}${spiralMeta}`
         : `${fmt(p.atLength)}" from top · ${fmt(p.circularDistance * 2)}" dia${idx}`;
       const hideTitle = hidden ? 'Show cut' : 'Hide cut';
       return (
         `<div class="placed-item${sel}${hidden ? ' cut-hidden' : ''}" data-placed="${p.id}" draggable="true">` +
         `<span class="placed-num" title="Drag to reorder">${i + 1}</span>` +
         `<button class="placed-main" type="button" draggable="false">` +
-        `${name}${run ? ' · run' : ''}${flute ? ' · flute' : ''}${hidden ? ' · hidden' : ''}` +
+        `${name}${run ? ' · run' : ''}${wrap ? ' · spiral' : flute ? ' · flute' : ''}${hidden ? ' · hidden' : ''}` +
         `<span class="meta">${meta}</span>` +
         `</button>` +
         `<span class="placed-ord">` +
@@ -805,12 +916,20 @@ function syncPlaceFields(force = false) {
   const p = selectedPlacement();
   const disabled = !p;
   const flute = Boolean(p && isFlute(p));
+  const wrap = Boolean(p && isSpiral(p));
+  const run = Boolean(p && isRun(p));
   placeLengthEl.disabled = disabled;
   placeDiaEl.disabled = disabled;
   placeRunEl.disabled = disabled;
   placeEndLengthEl.disabled = disabled;
   placeEndDiaEl.disabled = disabled;
-  placeIndexEl.disabled = disabled || !flute;
+  placeIndexEl.disabled = disabled || !flute || wrap;
+  if (placeSpiralEl) placeSpiralEl.disabled = disabled;
+  if (placeStartsEl) placeStartsEl.disabled = disabled || !wrap;
+  if (placeStartDegEl) placeStartDegEl.disabled = disabled || !wrap;
+  if (placeSpiralTravelEl) placeSpiralTravelEl.disabled = disabled || !wrap;
+  if (placeSpiralTurnsEl) placeSpiralTurnsEl.disabled = disabled || !wrap;
+  if (placeSpiralDirEl) placeSpiralDirEl.disabled = disabled || !wrap;
   btnDelete.toggleAttribute('disabled', disabled);
   if (!p) {
     if (force || document.activeElement !== placeLengthEl) placeLengthEl.value = '';
@@ -818,25 +937,51 @@ function syncPlaceFields(force = false) {
     if (force || document.activeElement !== placeEndLengthEl) placeEndLengthEl.value = '';
     if (force || document.activeElement !== placeEndDiaEl) placeEndDiaEl.value = '';
     if (force || document.activeElement !== placeIndexEl) placeIndexEl.value = '';
+    if (placeStartsEl && (force || document.activeElement !== placeStartsEl)) placeStartsEl.value = '';
+    if (placeStartDegEl && (force || document.activeElement !== placeStartDegEl)) placeStartDegEl.value = '';
+    if (placeSpiralTravelEl && (force || document.activeElement !== placeSpiralTravelEl)) placeSpiralTravelEl.value = '';
+    if (placeSpiralTurnsEl && (force || document.activeElement !== placeSpiralTurnsEl)) placeSpiralTurnsEl.value = '';
+    if (placeSpiralDirEl && (force || document.activeElement !== placeSpiralDirEl)) placeSpiralDirEl.value = 'cw';
     placeRunEl.checked = false;
+    if (placeSpiralEl) placeSpiralEl.checked = false;
     runFieldsEl.hidden = true;
+    if (spiralFieldsEl) spiralFieldsEl.hidden = true;
     if (indexFieldEl) indexFieldEl.hidden = true;
     if (placeDiaLabelEl) placeDiaLabelEl.textContent = 'Diameter at tip (in)';
     if (placeEndDiaLabelEl) placeEndDiaLabelEl.textContent = 'End diameter at tip (in)';
     return;
   }
-  const run = isRun(p);
-  if (indexFieldEl) indexFieldEl.hidden = !flute;
+  if (indexFieldEl) indexFieldEl.hidden = !flute || wrap;
+  if (spiralFieldsEl) spiralFieldsEl.hidden = !run || !wrap;
   if (placeDiaLabelEl) placeDiaLabelEl.textContent = flute ? 'Diameter at bearing (in)' : 'Diameter at tip (in)';
   if (placeEndDiaLabelEl) {
     placeEndDiaLabelEl.textContent = flute ? 'End diameter at bearing (in)' : 'End diameter at tip (in)';
   }
   if (force || document.activeElement !== placeRunEl) placeRunEl.checked = run;
+  if (placeSpiralEl && (force || document.activeElement !== placeSpiralEl)) placeSpiralEl.checked = wrap;
   runFieldsEl.hidden = !run;
   if (force || document.activeElement !== placeLengthEl) placeLengthEl.value = String(roundPlace(p.atLength));
   if (force || document.activeElement !== placeDiaEl) placeDiaEl.value = String(roundPlace(p.circularDistance * 2));
-  if (flute && (force || document.activeElement !== placeIndexEl)) {
+  if (flute && !wrap && (force || document.activeElement !== placeIndexEl)) {
     placeIndexEl.value = String(roundPlace(p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG));
+  }
+  if (wrap) {
+    if (placeStartsEl && (force || document.activeElement !== placeStartsEl)) {
+      placeStartsEl.value = String(p.spiralStarts ?? 1);
+    }
+    if (placeStartDegEl && (force || document.activeElement !== placeStartDegEl)) {
+      placeStartDegEl.value = String(roundPlace(p.spiralStartDeg ?? 0));
+    }
+    if (placeSpiralTravelEl && (force || document.activeElement !== placeSpiralTravelEl)) {
+      placeSpiralTravelEl.value = String(roundPlace(p.spiralTravel ?? DEFAULT_SPIRAL_TRAVEL));
+    }
+    if (placeSpiralTurnsEl && (force || document.activeElement !== placeSpiralTurnsEl)) {
+      placeSpiralTurnsEl.value = String(roundPlace(p.spiralTurns ?? DEFAULT_SPIRAL_TURNS));
+    }
+    if (placeSpiralDirEl && (force || document.activeElement !== placeSpiralDirEl)) {
+      placeSpiralDirEl.value =
+        p.spiralDir === 'ccw' || p.spiralDir === 'both' ? p.spiralDir : 'cw';
+    }
   }
   if (run) {
     if (force || document.activeElement !== placeEndLengthEl) {
@@ -876,6 +1021,16 @@ function sessionPayload() {
         ? { endAtLength: p.endAtLength, endCircularDistance: p.endCircularDistance }
         : {}),
       ...(isFlute(p) ? { indexIncrementDeg: p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG } : {}),
+      ...(isSpiral(p)
+        ? {
+            spiral: true,
+            spiralTravel: p.spiralTravel,
+            spiralTurns: p.spiralTurns,
+            spiralStarts: p.spiralStarts,
+            spiralStartDeg: p.spiralStartDeg,
+            spiralDir: p.spiralDir,
+          }
+        : {}),
     })),
     selectedId,
     sideView,
@@ -901,6 +1056,9 @@ function ensureView() {
   if (!sideView) sideView = defaultViewBox(model, wrap.width || 420, wrap.height || 640);
   return wrap;
 }
+
+/** @type {number} */
+let pending3d = 0;
 
 /** @param {{ resetCamera?: boolean, rebuildSide?: boolean, rebuild3d?: boolean, live?: boolean, forceFields?: boolean }} [opts] */
 function render(opts = {}) {
@@ -928,11 +1086,13 @@ function render(opts = {}) {
 
   const rebuild3d = opts.rebuild3d ?? !live;
   if (rebuild3d) {
-    view3d.update(model, {
-      rebuild: true,
-      resetCamera: Boolean(opts.resetCamera) || !cameraFramed,
+    const resetCamera = Boolean(opts.resetCamera) || !cameraFramed;
+    if (pending3d) cancelAnimationFrame(pending3d);
+    pending3d = requestAnimationFrame(() => {
+      pending3d = 0;
+      view3d.update(model, { rebuild: true, resetCamera });
+      cameraFramed = true;
     });
-    cameraFramed = true;
   } else if (opts.resetCamera) {
     view3d.update(model, {
       rebuild: false,

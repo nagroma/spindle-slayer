@@ -4,10 +4,11 @@
 // Display name is the filename without extension.
 
 import { importDxfProfile, importDxfFluteProfile } from './dxf-profile.js';
-import { validateBitProfile } from './bits.js';
+import { validateBitProfile } from './profile.js';
 
 /**
- * @typedef {import('./bits.js').Bit} Bit
+ * @typedef {import('./profile.js').BitProfile} BitProfile
+ * @typedef {{id: string, name: string, tool: string, group: string, kind?: 'plunge' | 'flute', profile: BitProfile}} Bit
  * @typedef {import('./geometry.js').Model} Model
  */
 

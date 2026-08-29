@@ -7,7 +7,7 @@ Domain background for the mill and for this planner. Product decisions live in `
 - **Headstock**: spins the workpiece, either freely (hand crank / motor, indexed to fixed angles or rotated continuously) or coupled to the carriage via change gears.
 - **Carriage**: carries the router, travels the length of the workpiece on leadscrews.
 - **Change-gear train**: when engaged, couples carriage travel to headstock rotation at a set ratio (swap gears to change the ratio) — this produces a continuous spiral. Disengaged, the two motions are independent.
-- **Router orientation**: mounted **vertically** (bit tip plunges into the stock) for rings, beads, coves, and tapers, or **horizontally** (bit’s side rides against the stock) for flutes and spirals.
+- **Router orientation**: mounted **vertically** (bit tip plunges into the stock) for rings, beads, coves, tapers, and barley-twist spirals, or **horizontally** (bit’s side rides against the stock) for flutes and pineapple spirals.
 
 ## Cut families on the mill
 
@@ -16,9 +16,10 @@ Domain background for the mill and for this planner. Product decisions live in `
 | **Ring** (bead / cove / astragal / ball) | parked at one length | one full turn | vertical, tip in |
 | **Taper** (turned shape along the length) | travels | rotates | vertical, tip in |
 | **Flute / reed** | travels start→end | fixed angle, then index | horizontal, side against stock |
-| **Spiral** | travels start→end | geared to travel | horizontal, side against stock |
+| **Spiral (barley twist)** | travels start→end | geared to travel | vertical, on top |
+| **Pineapple** | travels start→end | geared to travel | horizontal, side against stock |
 
-The planner models **plunge** (parked, full revolution), **run / taper**, and **flutes** (side-mounted, indexed around the blank). Remaining-wood math is `radius(length, θ)`. A flute does not revolve: 2D remaining wood stays the turned envelope; 3D subtracts the cutter at each index angle. Spirals are later.
+The planner models **plunge** (parked, full revolution), **run / taper**, **flutes** (side-mounted, indexed), and **spiral / pineapple** (run plus geared rotation). Remaining-wood math is `radius(length, θ)`. A flute or spiral does not revolve: 2D remaining wood stays the turned envelope; 3D subtracts the cutter along the path. The **Spiral / pineapple** checkbox uses the same helix for both; a plunge bit (e.g. Magnate 7554) is a barley twist, a flute bit is a pineapple.
 
 ## Vocabulary
 
@@ -33,9 +34,10 @@ Use these words in the app and in docs. Longer product rules are in `requirement
 | Recipe | The list of cuts on this blank. |
 | Project | Stock + recipe, saved as a `.lomp` file (JSON; old `.json` still opens). |
 | Run / taper | The bit travels from start headstock/diameter to end headstock/diameter. |
+| Spiral / pineapple | Run with rotation geared to travel. Plunge bit = barley twist; flute bit = pineapple. |
 | Hidden cut | Still in the list, temporarily ignored in remaining wood. |
 
-**Turns-per-travel** (for a future spiral): in this project “2:1” means **2 inches of travel per turn**, not 2 turns per 1 inch of travel. In a `{turns, travel}` pair that is `{turns: 1, travel: 2}`.
+**Turns-per-travel** (spiral / pineapple ratio): in this project “2:1” means **2 inches of travel per turn**, not 2 turns per 1 inch of travel. That ratio is a per-cut parameter (not a fixed default). In a `{turns, travel}` pair that is `{turns: 1, travel: 2}`. **Starts** is how many interleaved helices (4 starts = 90°). **Start (deg)** is the first helix. **Turn** is clockwise, counter-clockwise, or both ways (the same bit in opposite spirals — typical barley twist).
 
 **Circular distance on the mill** depends on mount:
 
@@ -54,7 +56,7 @@ At each length station, remaining radius is:
 min(stockRadius(θ), envelopes of every visible cut)
 ```
 
-A cut’s envelope does not depend on θ (surface of revolution after a full turn). A shallow diameter-at-tip on fat square/hex stock only nicks the faces. That is correct; do not “help” by sinking the whole bit profile.
+A revolved cut’s envelope does not depend on θ (surface of revolution after a full turn). Flutes and spirals do: remaining wood is `min(stock, revolved cuts, groove at (x, θ))`. A shallow diameter-at-tip on fat square/hex stock only nicks the faces. That is correct; do not “help” by sinking the whole bit profile.
 
 A **hidden** cut is skipped. A **run** interpolates from start pose to end pose along the length; if run is off, stored end values are ignored.
 
@@ -64,12 +66,8 @@ Bit shapes come from `bits/*.dxf` (inches, tip at 0,0). The live library is that
 
 JSON, format `legacy-1200-project`, default name `spindle.lomp`. Stock plus cuts by **bit id** (DXF filename without extension). Profiles are not copied into the file; Open reloads them from `bits/`. The file also stores the 2D view box and 3D camera. Pane widths stay in the browser.
 
-A cut records length, circular distance, optional `hidden`, and if run is on: end length and end circular distance. Flute cuts also store `indexIncrementDeg`.
+A cut records length, circular distance, optional `hidden`, and if run is on: end length and end circular distance. Flute cuts also store `indexIncrementDeg`. A spiral / pineapple cut stores `spiral`, ratio (`spiralTravel` : `spiralTurns`), `spiralStarts`, `spiralStartDeg`, and `spiralDir` (`cw` / `ccw` / `both`).
 
 ## 3D preview axes
 
-Mill coordinates stay length / θ / r. The mesh maps **length → −Y** so the headstock is at the top (matching the 2D view). Left-right drag spins around the spindle; you can tumble past the ends and flip the piece over. This is display only, not machine XYZ.
-
-## Older experiment (not the planner UI)
-
-`src/recipe.js`, `src/bits.js`, and `src/view2d.js` are leftover from an earlier “operations list + unrolled view” experiment (rings / flutes / spirals as typed ops, bits traveling inside the recipe). The planner UI does not use that path. Keep them until we decide to delete or revive them; do not document them as how the app works.
+Mill coordinates stay length / θ / r. The mesh maps **length → −Y** so the headstock is at the top (matching the 2D view). Left-right drag spins around the spindle; you can tumble past the ends and flip the piece over. This is display only, not machine XYZ. Remaining wood is a closed mesh of `radius(length, θ)`. When a spiral is on, the mesh columns twist with the helix so the wrap follows the cutter path.

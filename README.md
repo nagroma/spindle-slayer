@@ -11,7 +11,7 @@ You need a modern browser. **Save** uses the browser's Save dialog so you can na
 1. Open **https://spindle-slayer.vercel.app** (Chrome or Edge). During development, `npm run dev` is http://localhost:5173/.
 2. Set the blank: **round**, **square**, or **hex** (hex size is across the flats). Length and size are in inches.
 3. Click a bit to add a cut. Drag it for a rough placement; type **From headstock** and **Diameter at tip** for the exact numbers.
-4. Optional: check **Run / taper** and set the stop (end headstock and end diameter). Flute bits (green in the picker) use the same run fields as the bearing path; set **Index (deg)** for how often the groove repeats around the piece.
+4. Optional: check **Run / taper** and set the stop (end headstock and end diameter). Check **Spiral / pineapple** to gear rotation to travel (ratio, starts, start angle, turn direction). A top-mounted bit such as Magnate 7554 wraps a barley twist (defaults to both ways); a flute bit wraps a pineapple. Flute bits (green in the picker) use the same run fields as the bearing path; without spiral, set **Index (deg)** for how often the groove repeats around the piece.
 5. Reorder cuts with ▲▼ or by dragging the number. Hide a cut with the eye icon under ×. Remove a cut with ×. Undo / Redo sit next to Remove cut.
 6. **Save** opens the browser Save dialog. Name the file and pick a folder. **Open** defaults to `.lomp`; pick All files for an older `.json` or `.txt`.
 
@@ -19,7 +19,7 @@ You need a modern browser. **Save** uses the browser's Save dialog so you can na
 
 A refresh keeps your last session in the browser. Named designs live in files you Save, so you can have more than one.
 
-The 2D view is the profile vs the centerline (length down, headstock at the top). Wheel zooms (left edge stays put), shift+wheel scrolls along the blank. Adding or selecting a bit does not change the zoom. The 3D view is the remaining wood after a full revolution (headstock at the top; drag up/down to flip). Next to the stock fields, **3D** is a three-step quality slider: Fast (default), Better, Best. Best is slower.
+The 2D view is the profile vs the centerline (length down, headstock at the top). Wheel zooms (left edge stays put), shift+wheel scrolls along the blank. Adding or selecting a bit does not change the zoom. The 3D view is the remaining wood after a full revolution (headstock at the top; drag up/down to flip). Spirals twist the 3D mesh along the wrap so it is not a stack of rings. Next to the stock fields, **3D** is a three-step quality slider: Fast (default), Better, Best. Best is slower.
 
 ## Backlog
 
@@ -27,7 +27,7 @@ The 2D view is the profile vs the centerline (length down, headstock at the top)
 
 - Tracer later: each fitted curve is a bit cut from the side, so a segment should match a real bit half-profile (known radius/shape). Fit order is per cut, not a whole-trace toggle.
 - Photo overlay of a raw picture behind 2D stock — secondary; perspective photos do not map 1:1 onto the blank.
-- Flutes, spirals, and indexed repeats — **flutes done** (folder `bits/Flute/`, bearing-ride, index increment, 3D grooves + quality slider). Spirals later.
+- Flutes, spirals, and indexed repeats — **flutes and spiral/pineapple done** (checkbox under run / taper; ratio, starts, start angle, turn direction). Hollow spiral later.
 
 ### Medium
 

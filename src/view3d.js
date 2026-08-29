@@ -1,11 +1,13 @@
 // @ts-check
-// 3D preview: a mesh sampled from radius(x, theta). Square/hex blanks are
-// not surfaces of revolution, so this cannot be LatheGeometry.
+// 3D preview: remaining radius on a grid. Inside a spiral/flute run the
+// columns twist with the helix. Outside that run they stay locked to the
+// stock (square faces stay square; round ends stay a cylinder).
 
 import * as THREE from 'three';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
-import { bakeCutRadii, remainingFromCut, sampleStations, hasVisibleFlutes, fluteRadiusAt } from './geometry.js';
+import { bakeCutRadii, remainingFromCut, sampleStations, visibleGroovePlacements, grooveAnglesAt, grooveRadiiAtThetas, isRun, isFlute } from './geometry.js';
 import { stockMaxRadius } from './stock.js';
+import { fluteCutDepth, profileMaxRadius } from './profile.js';
 
 /**
  * @typedef {import('./geometry.js').Model} Model
@@ -33,20 +35,20 @@ export const CAMERA3D_LAYOUT = 'headstock-up-fill';
  * @typedef {1 | 2 | 3} MeshQuality
  * @typedef {{
  *   nTheta: number,
- *   nThetaFlute: number,
  *   dense: boolean,
  *   perInch: number,
  *   perInchMax: number,
  *   flutePerInch: number,
  *   flutePosesPerInch: number,
+ *   ribbonAcross: number,
  * }} MeshQualityOpts
  */
 
 /** @type {Record<MeshQuality, MeshQualityOpts>} */
 export const MESH_QUALITY = {
-  1: { nTheta: 96, nThetaFlute: 192, dense: false, perInch: 4, perInchMax: 240, flutePerInch: 8, flutePosesPerInch: 12 },
-  2: { nTheta: 180, nThetaFlute: 288, dense: true, perInch: 12, perInchMax: 560, flutePerInch: 28, flutePosesPerInch: 28 },
-  3: { nTheta: 288, nThetaFlute: 480, dense: true, perInch: 24, perInchMax: 960, flutePerInch: 56, flutePosesPerInch: 56 },
+  1: { nTheta: 96, dense: false, perInch: 4, perInchMax: 240, flutePerInch: 12, flutePosesPerInch: 8, ribbonAcross: 11 },
+  2: { nTheta: 180, dense: true, perInch: 12, perInchMax: 560, flutePerInch: 20, flutePosesPerInch: 16, ribbonAcross: 17 },
+  3: { nTheta: 288, dense: true, perInch: 24, perInchMax: 960, flutePerInch: 32, flutePosesPerInch: 24, ribbonAcross: 25 },
 };
 
 /** @param {unknown} n @returns {MeshQuality} */
@@ -102,28 +104,49 @@ export function camera3dFramePose(length, maxR, aspect, fovDeg = 32) {
  * @returns {THREE.BufferGeometry}
  */
 export function buildSpindleGeometry(model, quality = 1) {
+  const q = MESH_QUALITY[clampMeshQuality(quality)];
   const stock = model.stock;
   const { length } = stock;
-  const q = MESH_QUALITY[clampMeshQuality(quality)];
+  const range = grooveMeshRange(model);
   const xs = sampleStations(model, {
     dense: q.dense,
     perInch: q.perInch,
     perInchMax: q.perInchMax,
     flutePerInch: q.flutePerInch,
   });
+  if (range) {
+    const pad = 1e-4;
+    const set = new Set(xs);
+    set.add(range.lo);
+    set.add(range.hi);
+    set.add(Math.max(0, range.lo - pad));
+    set.add(Math.min(length, range.hi + pad));
+    xs.length = 0;
+    xs.push(...[...set].sort((a, b) => a - b));
+  }
   const cuts = bakeCutRadii(model, xs);
-  const flutes = hasVisibleFlutes(model);
-  const nTheta = flutes ? q.nThetaFlute : q.nTheta;
+  const nTheta = q.nTheta;
   const cols = nTheta + 1;
   const nx = xs.length - 1;
+  const grooves = visibleGroovePlacements(model);
+  const ref = grooves[0] ?? null;
 
   const positions = [];
+  /** @type {boolean[]} */
+  const helical = [];
   for (let i = 0; i < xs.length; i++) {
     const x = xs[i];
     const cut = cuts[i];
+    const inSweep = Boolean(range && x >= range.lo - 1e-9 && x <= range.hi + 1e-9);
+    helical.push(inSweep);
+    const base = inSweep && ref ? grooveAnglesAt(ref, x)[0] : 0;
+    /** @type {number[]} */
+    const thetas = [];
+    for (let j = 0; j <= nTheta; j++) thetas.push(base + (360 * j) / nTheta);
+    const grooveRow = inSweep ? grooveRadiiAtThetas(model, x, thetas, q.flutePosesPerInch) : null;
     for (let j = 0; j <= nTheta; j++) {
-      const theta = (360 * j) / nTheta;
-      const groove = flutes ? fluteRadiusAt(model, x, theta, { posesPerInch: q.flutePosesPerInch }) : Number.POSITIVE_INFINITY;
+      const theta = thetas[j];
+      const groove = grooveRow ? grooveRow[j] : Number.POSITIVE_INFINITY;
       const r = remainingFromCut(stock, theta, Math.min(cut, groove));
       positions.push(...millToWorld(r, theta, x));
     }
@@ -131,6 +154,7 @@ export function buildSpindleGeometry(model, quality = 1) {
 
   const indices = [];
   for (let i = 0; i < nx; i++) {
+    if (helical[i] !== helical[i + 1]) continue;
     for (let j = 0; j < nTheta; j++) {
       const a = i * cols + j;
       const b = a + cols;
@@ -138,24 +162,82 @@ export function buildSpindleGeometry(model, quality = 1) {
     }
   }
 
+  const nRing = cols;
+  const headRim = positions.length / 3;
+  for (let j = 0; j < nRing; j++) {
+    positions.push(positions[j * 3], positions[j * 3 + 1], positions[j * 3 + 2]);
+  }
   const headCenter = positions.length / 3;
   positions.push(0, 0, 0);
   for (let j = 0; j < nTheta; j++) {
-    indices.push(headCenter, j + 1, j);
+    indices.push(headCenter, headRim + j + 1, headRim + j);
+    indices.push(headCenter, headRim + j, headRim + j + 1);
   }
 
+  const footSrc = nx * cols;
+  const footRim = positions.length / 3;
+  for (let j = 0; j < nRing; j++) {
+    const s = (footSrc + j) * 3;
+    positions.push(positions[s], positions[s + 1], positions[s + 2]);
+  }
   const footCenter = positions.length / 3;
   positions.push(0, -length, 0);
-  const footRow = nx * cols;
   for (let j = 0; j < nTheta; j++) {
-    indices.push(footCenter, footRow + j, footRow + j + 1);
+    indices.push(footCenter, footRim + j, footRim + j + 1);
+    indices.push(footCenter, footRim + j + 1, footRim + j);
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setIndex(indices);
+  setMeshIndex(geo, indices);
   geo.computeVertexNormals();
   return geo;
+}
+
+/**
+ * Length range where a flute/spiral actually cuts, including bit reach.
+ * @param {Model} model
+ * @returns {{ lo: number, hi: number } | null}
+ */
+function grooveMeshRange(model) {
+  const gs = visibleGroovePlacements(model);
+  if (!gs.length) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const p of gs) {
+    const a = p.atLength;
+    const b = isRun(p) && p.endAtLength != null ? p.endAtLength : a;
+    const reach = grooveReach(p);
+    lo = Math.min(lo, Math.min(a, b) - reach);
+    hi = Math.max(hi, Math.max(a, b) + reach);
+  }
+  const { length } = model.stock;
+  return { lo: Math.max(0, lo), hi: Math.min(length, hi) };
+}
+
+/** @param {import('./geometry.js').Placement} p */
+function grooveReach(p) {
+  if (isFlute(p)) {
+    const d = fluteCutDepth(/** @type {import('./profile.js').FluteProfile} */ (p.profile));
+    return d > 0 ? d : 0.25;
+  }
+  const maxR = profileMaxRadius(p.profile);
+  return Number.isFinite(maxR) && maxR !== Infinity ? maxR : 0.5;
+}
+
+/**
+ * Better/Best meshes exceed 65,535 vertices. A 16-bit index wraps, so the
+ * end caps attach to the wrong points and the spindle looks like a pipe.
+ * @param {THREE.BufferGeometry} geo
+ * @param {number[]} indices
+ */
+function setMeshIndex(geo, indices) {
+  let max = 0;
+  for (let i = 0; i < indices.length; i++) {
+    if (indices[i] > max) max = indices[i];
+  }
+  const ArrayType = max > 65535 ? Uint32Array : Uint16Array;
+  geo.setIndex(new THREE.BufferAttribute(new ArrayType(indices), 1));
 }
 
 /**
@@ -180,6 +262,9 @@ export function createView3d(container) {
   const key = new THREE.DirectionalLight(0xffe8c8, 1.05);
   key.position.set(8, 12, -6);
   scene.add(key);
+  const fill = new THREE.DirectionalLight(0xc4b49a, 0.4);
+  fill.position.set(2, -14, 4);
+  scene.add(fill);
   const rim = new THREE.DirectionalLight(0x88aacc, 0.45);
   rim.position.set(-10, 4, 8);
   scene.add(rim);

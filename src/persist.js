@@ -1,5 +1,5 @@
 // @ts-check
-import { isRun, isCutHidden, isFlute, DEFAULT_FLUTE_INDEX_DEG } from './geometry.js';
+import { isRun, isCutHidden, isFlute, isSpiral, DEFAULT_FLUTE_INDEX_DEG, DEFAULT_SPIRAL_TRAVEL, DEFAULT_SPIRAL_TURNS, DEFAULT_SPIRAL_STARTS, indexDegToStarts } from './geometry.js';
 
 export const UI_KEY = 'legacy1200.ui';
 export const SESSION_KEY = 'legacy1200.session';
@@ -65,6 +65,12 @@ export const PROJECT_SAVE_PICKER = {
  *     endAtLength?: number,
  *     endCircularDistance?: number,
  *     indexIncrementDeg?: number,
+ *     spiral?: boolean,
+ *     spiralTravel?: number,
+ *     spiralTurns?: number,
+ *     spiralStarts?: number,
+ *     spiralStartDeg?: number,
+ *     spiralDir?: 'cw' | 'ccw' | 'both',
  *   }[],
  *   selectedId?: string | null,
  *   sideView?: ViewBox | null,
@@ -132,8 +138,19 @@ export function serializeProject(model, extra = {}) {
         cut.endCircularDistance = p.endCircularDistance;
         cut.endDiameterAtTip = /** @type {number} */ (p.endCircularDistance) * 2;
       }
-      if (isFlute(p)) {
+      if (isFlute(p) && !isSpiral(p)) {
         cut.indexIncrementDeg = p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG;
+      }
+      if (isSpiral(p)) {
+        cut.spiral = true;
+        cut.spiralTravel = p.spiralTravel ?? DEFAULT_SPIRAL_TRAVEL;
+        cut.spiralTurns = p.spiralTurns ?? DEFAULT_SPIRAL_TURNS;
+        cut.spiralStarts = p.spiralStarts ?? DEFAULT_SPIRAL_STARTS;
+        cut.spiralStartDeg = p.spiralStartDeg ?? 0;
+        cut.spiralDir = p.spiralDir === 'ccw' || p.spiralDir === 'both' ? p.spiralDir : 'cw';
+        if (isFlute(p)) {
+          cut.indexIncrementDeg = p.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG;
+        }
       }
       return cut;
     }),
@@ -168,7 +185,7 @@ export function parseProjectJson(text) {
 
 /**
  * @param {unknown} data
- * @param {import('./bits.js').Bit[]} bits
+ * @param {import('./demo-bits.js').Bit[]} bits
  * @returns {{
  *   model: import('./geometry.js').Model,
  *   selectedId: string | null,
@@ -233,6 +250,26 @@ export function deserializeProject(data, bits) {
       placement.indexIncrementDeg =
         Number.isFinite(inc) && inc > 0 ? Math.min(180, Math.max(1, inc)) : DEFAULT_FLUTE_INDEX_DEG;
     }
+    if (c.spiral === true && placement.run) {
+      placement.spiral = true;
+      const travel = Number(c.spiralTravel);
+      const turns = Number(c.spiralTurns);
+      const starts = Number(c.spiralStarts);
+      const startDeg = Number(c.spiralStartDeg);
+      placement.spiralTravel =
+        Number.isFinite(travel) && Math.abs(travel) > 1e-9 ? travel : DEFAULT_SPIRAL_TRAVEL;
+      placement.spiralTurns = Number.isFinite(turns) ? turns : DEFAULT_SPIRAL_TURNS;
+      placement.spiralStarts =
+        Number.isFinite(starts) && starts >= 1
+          ? Math.min(36, Math.max(1, Math.round(starts)))
+          : isFlute(placement)
+            ? indexDegToStarts(placement.indexIncrementDeg ?? DEFAULT_FLUTE_INDEX_DEG)
+            : DEFAULT_SPIRAL_STARTS;
+      placement.spiralStartDeg = Number.isFinite(startDeg) ? startDeg : 0;
+      if (c.spiralDir === 'ccw' || c.spiralDir === 'both' || c.spiralDir === 'cw') {
+        placement.spiralDir = c.spiralDir;
+      }
+    }
     placements.push(placement);
   }
   return {
@@ -249,7 +286,7 @@ export function deserializeProject(data, bits) {
 }
 
 /**
- * @param {import('./bits.js').Bit[]} bits
+ * @param {import('./demo-bits.js').Bit[]} bits
  * @param {SessionState} session
  */
 export function hydrateSession(bits, session) {

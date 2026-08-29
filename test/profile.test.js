@@ -8,6 +8,7 @@ import {
   fluteCutDepth,
   fluteBearingRadius,
   fluteBitCenterRadius,
+  validateBitProfile,
 } from '../src/profile.js';
 
 describe('depthForWidth (round-nose closed form)', () => {
@@ -74,5 +75,35 @@ describe('flute DXF sizes', () => {
 
   it('places the bit axis at wood radius plus bearing radius', () => {
     expect(fluteBitCenterRadius(1.5, flute)).toBeCloseTo(1.6875, 10);
+  });
+});
+
+describe('validateBitProfile', () => {
+  it('accepts a valid round profile', () => {
+    expect(() => validateBitProfile({ type: 'round', r: 0.25 })).not.toThrow();
+  });
+
+  it('accepts a valid v profile', () => {
+    expect(() => validateBitProfile({ type: 'v', angleDeg: 90 })).not.toThrow();
+  });
+
+  it('rejects a negative radius', () => {
+    expect(() => validateBitProfile({ type: 'round', r: -1 })).toThrow();
+  });
+
+  it('rejects an unknown profile type', () => {
+    expect(() => validateBitProfile({ type: 'ogee' })).toThrow();
+  });
+
+  it('requires a flute bearingRadius', () => {
+    expect(() =>
+      validateBitProfile({
+        type: 'flute',
+        points: [
+          { d: 0.2, r: 0 },
+          { d: 0.4, r: 0.2 },
+        ],
+      })
+    ).toThrow(/bearingRadius/);
   });
 });

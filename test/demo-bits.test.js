@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { loadLibraryBits } from '../src/demo-bits.js';
-import { validateBitProfile } from '../src/bits.js';
+import { validateBitProfile } from '../src/profile.js';
 
 describe('bits/ DXF library', () => {
   const bits = loadLibraryBits();

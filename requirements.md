@@ -21,7 +21,7 @@ If a new idea would break a hard requirement, stop and ask.
 - Start from **prism stock**: round (size = diameter), square (size = side), or hex (size = **across flats**).
 - Lengths are in **inches**.
 - Bits **only subtract**. No glued-on pommel, no additive beads. A ball only appears if the blank is fat enough for that bit at that diameter.
-- **Plunge first** (carriage parked, one full revolution). Flutes are a second cut kind: side-mounted, bearing path uses the same run / taper fields, index increment is 3D only. The model is still `radius(x, θ)`.
+- **Plunge first** (carriage parked, one full revolution). Flutes are a second cut kind: side-mounted, bearing path uses the same run / taper fields, index increment is 3D only. **Spiral / pineapple** is a checkbox on a run: change gears lock rotation to travel. A top-mounted plunge bit (e.g. Magnate 7554) is a barley twist; a flute bit is a pineapple. Same helix; the bit chooses the cutter. The model is still `radius(x, θ)`.
 - **Circular distance** = tip to workpiece centerline. For a flute bit, this is where the **bearing** sits. The bit axis is offset outward by the DXF bearing radius; the designer does not add that by hand. The UI field is **diameter at tip** (`diameter = 2 × circularDistance`), labeled diameter at bearing when a flute is selected.
 - How deep a bit cuts is **the user’s design choice**. Example: 3.5″ square stock with a 3.00″ diameter at the tip only nicks ~0.25″ into the faces. That is correct. Do not “help” by carving the whole bit profile into the wood.
 - Taper is a future **cut**, not starting stock.
@@ -85,8 +85,9 @@ These are “this seems like a good direction right now,” not frozen.
 - Compact bit chips (icon + filename) in the top bar; compact cut list on the left with the typed headstock/diameter fields under it.
 - A cut can be **hidden** (still in the list, ignored in remaining wood) without deleting it. Undoable.
 - 2D: mouse wheel zooms (pinned left), shift+wheel scrolls along the blank, drag empty space to scroll up/down, +/− and Fit 2D buttons.
-- 2D remaining wood is the blank minus the bit’s 2D solid (and the opposite side after a revolution), so the hole follows the bit where they overlap.
-- 3D: headstock at the **top**; default view fills the pane at a slight three-quarter tilt. Left-right drag **spins around the spindle**; drag up/down to flip the piece over. Lights stay world-fixed. A **3D** slider next to stock (Fast / Better / Best) sets mesh density. Fast is the original preview; Best is slow. Stored in the browser, not in the `.lomp`.
+- 2D remaining wood is the blank minus the bit’s 2D solid (and the opposite side after a revolution), so the hole follows the bit where they overlap. Flutes and spirals do not change that 2D envelope; the wrap is 3D.
+- **Spiral / pineapple** sits under Run / taper. Ratio is **inches of travel : turns** (2:1 = 2″ travel per turn). **Starts** (4 starts = 90°). **Start (deg)** is the first helix. **Turn** is clockwise, counter-clockwise, or both ways (barley twist defaults to both; pineapple to one way). A plunge bit on top is a barley twist; a flute bit is a pineapple. Same helix math.
+- 3D: headstock at the **top**; default view fills the pane at a slight three-quarter tilt. Left-right drag **spins around the spindle**; drag up/down to flip the piece over. Lights stay world-fixed. A **3D** slider next to stock (Fast / Better / Best) sets mesh density. Remaining wood is a closed polar mesh; inside a spiral the columns twist with the helix. Outside the wrap they stay locked to the stock so square ends stay square. Stored in the browser, not in the `.lomp`.
 - Pane splitter defaults and minimum widths are a starting point; users override them.
 - Bit count is expected in the **low tens**, not hundreds.
 
@@ -100,7 +101,7 @@ These are “this seems like a good direction right now,” not frozen.
 
 ### Explicitly later (not in current scope)
 
-- **Spirals** (flutes are in; spirals later).
+- Hollow spiral (barley-twist bit plus an upcut) is later.
 - In-app photo scaler (medium, only if overlay needs it).
 - Better bit display names and full bit-management (medium).
 - Taper as its own cut — **deferred**. Current run/taper matches the mill well enough.
@@ -120,6 +121,7 @@ These are “this seems like a good direction right now,” not frozen.
 | Recipe | The list of cuts on this blank. |
 | Project | Stock + recipe, saved as a `.lomp` file (JSON). |
 | Run / taper | Bit travels from start pose to end pose along the blank. |
+| Spiral / pineapple | Run with rotation geared to travel. Plunge bit = barley twist; flute bit = pineapple. |
 | Hidden cut | Still in the recipe; temporarily skipped when drawing remaining wood. |
 
 ---
