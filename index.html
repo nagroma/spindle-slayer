@@ -128,6 +128,22 @@
     button.bit .nm { font-size: 12px; white-space: nowrap; }
     button.bit.flute { border-color: #2f5c40; }
     button.bit.flute:hover { border-color: #6cbf84; }
+    .bit-chip { display: flex; align-items: stretch; }
+    .bit-chip .bit { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .bit-chip .bit-remove {
+      background: #151412;
+      color: #8a7f72;
+      border: 1px solid var(--line);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      padding: 0 7px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .bit-chip .bit-remove:hover { color: #c97a6a; border-color: #5a3a33; }
+    button.bit.user { border-style: dashed; }
+    .bits > .ghost { align-self: center; }
     .bit-icon { flex: 0 0 auto; background: #101110; border-radius: 4px; }
     .bit-icon path { fill: #4a7ea8; fill-opacity: 0.75; stroke: #7eb0d4; stroke-width: 0.03; }
     .bit-icon.flute circle { fill: #3d7a52; fill-opacity: 0.75; stroke: #7dcc96; stroke-width: 0.04; }
@@ -529,6 +545,7 @@
   </div>
   <input id="fileOpen" type="file" accept=".lomp,.json,.txt,text/plain" hidden />
   <input id="fileOverlay" type="file" accept=".dxf,image/vnd.dxf" hidden />
+  <input id="fileBit" type="file" accept=".dxf,image/vnd.dxf" hidden />
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

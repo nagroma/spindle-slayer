@@ -60,11 +60,11 @@ A revolved cut’s envelope does not depend on θ (surface of revolution after a
 
 A **hidden** cut is skipped. A **run** interpolates from start pose to end pose along the length; if run is off, stored end values are ignored.
 
-Bit shapes come from `bits/*.dxf` (inches, tip at 0,0). The live library is that folder, not `docs/bit-catalog.md`.
+Bit shapes come from `bits/*.dxf` (inches, tip at 0,0). The shipped library is that folder, not `docs/bit-catalog.md`. Extra bits can be loaded at runtime with **Add bit**.
 
 ## Project file (current)
 
-JSON, format `legacy-1200-project`, default name `spindle.lomp`. Stock plus cuts by **bit id** (DXF filename without extension). Profiles are not copied into the file; Open reloads them from `bits/`. The file also stores the 2D view box and 3D camera. Pane widths stay in the browser.
+JSON, format `legacy-1200-project`, default name `spindle.lomp`. Stock plus cuts by **bit id** (DXF filename without extension). Shipped profiles are not copied into the file; Open reloads them from `bits/`. User-loaded bits used in cuts are stored as `customBits`. The file also stores the 2D view box and 3D camera. Pane widths stay in the browser.
 
 A cut records length, circular distance, optional `hidden`, and if run is on: end length and end circular distance. Flute cuts also store `indexIncrementDeg`. A spiral / pineapple cut stores `spiral`, ratio (`spiralTravel` : `spiralTurns`), `spiralStarts`, `spiralStartDeg`, and `spiralDir` (`cw` / `ccw` / `both`).
 

@@ -1,8 +1,10 @@
 // @ts-check
 import { isRun, isCutHidden, isFlute, isSpiral, DEFAULT_FLUTE_INDEX_DEG, DEFAULT_SPIRAL_TRAVEL, DEFAULT_SPIRAL_TURNS, DEFAULT_SPIRAL_STARTS, indexDegToStarts } from './geometry.js';
+import { validateBitProfile } from './profile.js';
 
 export const UI_KEY = 'legacy1200.ui';
 export const SESSION_KEY = 'legacy1200.session';
+export const USER_BITS_KEY = 'legacy1200.userBits';
 export const PROJECT_FORMAT = 'legacy-1200-project';
 export const PROJECT_VERSION = 1;
 export const PROJECT_FILENAME = 'spindle.lomp';
@@ -77,6 +79,15 @@ export const PROJECT_SAVE_PICKER = {
  *   camera3d?: Camera3d | null,
  *   overlay?: OverlayState | null,
  * }} SessionState
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   tool: string,
+ *   group: string,
+ *   kind: 'plunge' | 'flute',
+ *   profile: import('./profile.js').BitProfile,
+ *   user: true,
+ * }} UserBit
  */
 
 /** @param {string} key */
@@ -112,9 +123,78 @@ export function saveSession(session) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
+/** @param {unknown} raw @returns {UserBit | null} */
+export function parseUserBit(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = /** @type {any} */ (raw);
+  if (typeof v.id !== 'string' || !v.id.trim()) return null;
+  try {
+    validateBitProfile(v.profile);
+  } catch {
+    return null;
+  }
+  const flute = v.kind === 'flute' || v.profile?.type === 'flute';
+  const id = v.id.trim();
+  return {
+    id,
+    name: typeof v.name === 'string' && v.name.trim() ? v.name.trim() : id,
+    tool: typeof v.tool === 'string' && v.tool.trim() ? v.tool.trim() : id,
+    group: flute ? 'flute' : 'compound',
+    kind: flute ? 'flute' : 'plunge',
+    profile: v.profile,
+    user: true,
+  };
+}
+
+/** @param {unknown} raw @returns {UserBit[]} */
+export function parseUserBits(raw) {
+  if (!Array.isArray(raw)) return [];
+  /** @type {UserBit[]} */
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const bit = parseUserBit(item);
+    if (!bit || seen.has(bit.id)) continue;
+    seen.add(bit.id);
+    out.push(bit);
+  }
+  return out;
+}
+
+/** @param {UserBit | import('./demo-bits.js').Bit} bit */
+export function packUserBit(bit) {
+  const flute = bit.kind === 'flute' || bit.profile?.type === 'flute';
+  return {
+    id: bit.id,
+    name: bit.name || bit.id,
+    tool: bit.tool || bit.id,
+    group: flute ? 'flute' : 'compound',
+    kind: /** @type {'plunge' | 'flute'} */ (flute ? 'flute' : 'plunge'),
+    profile: bit.profile,
+    user: true,
+  };
+}
+
+/** @returns {UserBit[]} */
+export function loadUserBits() {
+  return parseUserBits(readJson(USER_BITS_KEY));
+}
+
+/** @param {Iterable<UserBit | import('./demo-bits.js').Bit>} bits */
+export function saveUserBits(bits) {
+  const packed = [];
+  const seen = new Set();
+  for (const bit of bits) {
+    if (!bit?.user || !bit.id || seen.has(bit.id)) continue;
+    seen.add(bit.id);
+    packed.push(packUserBit(bit));
+  }
+  localStorage.setItem(USER_BITS_KEY, JSON.stringify(packed));
+}
+
 /**
  * @param {import('./geometry.js').Model} model
- * @param {{ selectedId?: string | null, sideView?: ViewBox | null, camera3d?: Camera3d | null, overlay?: OverlayState | null }} [extra]
+ * @param {{ selectedId?: string | null, sideView?: ViewBox | null, camera3d?: Camera3d | null, overlay?: OverlayState | null, customBits?: (UserBit | import('./demo-bits.js').Bit)[] }} [extra]
  */
 export function serializeProject(model, extra = {}) {
   /** @type {Record<string, unknown>} */
@@ -162,6 +242,9 @@ export function serializeProject(model, extra = {}) {
   if (camera3d) file.camera3d = camera3d;
   const overlay = parseOverlay(extra.overlay);
   if (overlay) file.overlay = overlay;
+  const used = new Set(model.placements.map((p) => p.bitId));
+  const customBits = parseUserBits((extra.customBits ?? []).map(packUserBit).filter((b) => used.has(b.id)));
+  if (customBits.length) file.customBits = customBits.map(packUserBit);
   return file;
 }
 
@@ -193,6 +276,7 @@ export function parseProjectJson(text) {
  *   sideView: ViewBox | null,
  *   camera3d: Camera3d | null,
  *   overlay: OverlayState | null,
+ *   customBits: UserBit[],
  * } | null}
  */
 export function deserializeProject(data, bits) {
@@ -205,13 +289,22 @@ export function deserializeProject(data, bits) {
   if (!Number.isFinite(length) || !Number.isFinite(size) || length <= 0 || size <= 0) return null;
   const type = stock.type === 'round' || stock.type === 'hex' ? stock.type : 'square';
   const cuts = Array.isArray(obj.cuts) ? obj.cuts : Array.isArray(obj.placements) ? obj.placements : [];
+  const customBits = parseUserBits(obj.customBits);
+  /** @type {(import('./demo-bits.js').Bit | UserBit)[]} */
+  const library = bits.slice();
+  const libIds = new Set(library.map((b) => b.id));
+  for (const b of customBits) {
+    if (libIds.has(b.id)) continue;
+    library.push(b);
+    libIds.add(b.id);
+  }
   /** @type {string[]} */
   const missing = [];
   /** @type {import('./geometry.js').Placement[]} */
   const placements = [];
   for (const c of cuts) {
     if (!c || typeof c.bitId !== 'string') continue;
-    const bit = bits.find((b) => b.id === c.bitId);
+    const bit = library.find((b) => b.id === c.bitId);
     if (!bit) {
       missing.push(c.bitId);
       continue;
@@ -282,6 +375,7 @@ export function deserializeProject(data, bits) {
     sideView: parseViewBox(obj.sideView),
     camera3d: parseCamera3d(obj.camera3d),
     overlay: parseOverlay(obj.overlay),
+    customBits,
   };
 }
 

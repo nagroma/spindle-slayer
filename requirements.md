@@ -28,9 +28,10 @@ If a new idea would break a hard requirement, stop and ask.
 
 ### Bits
 
-- Bit shapes come from **DXF half-profiles** in `bits/`. Units in those files are **inches**. Tip at (0,0).
+- Shipped bit shapes come from **DXF half-profiles** in `bits/`. Units in those files are **inches**. Tip at (0,0).
 - Display name is the **filename without extension** for now. Real names will need characters that cannot live in filenames (`"` and others); that naming system is later.
-- The library on screen must **match the `bits/` folder** (add a DXF, it becomes a bit; remove it, it disappears). No separate hand-maintained bit list that can drift.
+- The shipped library on screen must **match the `bits/` folder** (add a DXF there and rebuild; remove it, it disappears). No separate hand-maintained shipped bit list that can drift.
+- The live app can **Add bit** (load a DXF at runtime) and remove extras. Those bits live in this browser, not in `bits/`. If a cut uses one, its profile is stored in the `.lomp`. Shipped bits cannot be deleted from the live app.
 - Each bit button shows a **small icon of the half-profile**.
 - The designer can **add and remove cuts**. Adding a bit from the palette creates a new cut on this blank.
 
@@ -63,16 +64,17 @@ These are “this seems like a good direction right now,” not frozen.
 
 ### Bits pipeline
 
-- Today each `bits/*.dxf` is imported when the app loads (Vite glob in dev/build). Reloading the app (and rebuilding for a shipped `dist/`) is how a new file appears.
+- Today each `bits/*.dxf` is imported when the app loads (Vite glob in dev/build). Reloading the app (and rebuilding for a shipped `dist/`) is how a new **shipped** file appears. **Add bit** loads extra DXFs into this browser without a rebuild.
 - DXF sketches in `bits/` use **Y along the bit axis** and **X as radius**; import **auto-detects** that. The older millimetre reference DXF in `reference/` is a different convention.
-- A processed on-disk cache of profiles, picking a subset of bits to show, and a full bit-management UI are medium (favorites, hide, names that are not filenames). Until then: `bits/` is the source of truth. Display name stays the filename.
+- A processed on-disk cache of profiles, picking a subset of bits to show, and a full bit-management UI are medium (favorites, hide, names that are not filenames). Until then: `bits/` is the shipped source of truth. Display name stays the filename. User-loaded DXFs are extra, per browser.
 - JSON for projects, not YAML.
 
 ### What is stored where
 
 - **User/layout preferences** (pane widths, 2D zoom/pan, selected cut, 3D mesh quality): browser `localStorage`.
 - **Last session recipe** (stock + cuts): also `localStorage`, so a refresh does not lose work.
-- **Named projects**: `.lomp` files (JSON). Save is a browser download so Chrome/Edge can show a real Save dialog (name + folder). A short-lived `.tmp` in Downloads is the browser staging the file. Open defaults to `.lomp` and still has All files for old `.json`/`.txt`. The file stores stock and cuts by **bit id** (filename). Profiles are not copied into the file; they are read from `bits/` on open.
+- **User-loaded bits**: also `localStorage`. They survive a refresh on that browser; they are not a folder on disk.
+- **Named projects**: `.lomp` files (JSON). Save is a browser download so Chrome/Edge can show a real Save dialog (name + folder). A short-lived `.tmp` in Downloads is the browser staging the file. Open defaults to `.lomp` and still has All files for old `.json`/`.txt`. The file stores stock and cuts by **bit id** (filename). Shipped profiles are not copied; they are read from `bits/` on open. If a cut uses a user-loaded bit, that profile is stored in the file as `customBits`.
 - The project file also stores **2D zoom/pan** and the **3D camera** (position + look-at). Open restores those views. Pane splitter widths stay in the browser (`localStorage`), not in the file.
 
 ### Display axes (3D)

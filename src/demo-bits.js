@@ -8,9 +8,117 @@ import { validateBitProfile } from './profile.js';
 
 /**
  * @typedef {import('./profile.js').BitProfile} BitProfile
- * @typedef {{id: string, name: string, tool: string, group: string, kind?: 'plunge' | 'flute', profile: BitProfile}} Bit
+ * @typedef {{id: string, name: string, tool: string, group: string, kind?: 'plunge' | 'flute', profile: BitProfile, user?: boolean}} Bit
  * @typedef {import('./geometry.js').Model} Model
  */
+
+/** Reject spindle-length overlays masquerading as bits. */
+export const MAX_USER_BIT_IN = 8;
+
+/**
+ * @param {string} filename
+ * @returns {string}
+ */
+export function bitIdFromFilename(filename) {
+  let name = String(filename ?? '').split(/[/\\]/).pop() ?? '';
+  name = name.replace(/\.dxf$/i, '').trim();
+  name = name.replace(/[?%*:|"<>]/g, '-');
+  return name || 'bit';
+}
+
+/**
+ * @param {string} desired
+ * @param {Iterable<string>} existingIds
+ */
+export function uniqueBitId(desired, existingIds) {
+  const ids = existingIds instanceof Set ? existingIds : new Set(existingIds);
+  const base = desired || 'bit';
+  if (!ids.has(base)) return base;
+  let n = 2;
+  while (ids.has(`${base} (${n})`)) n++;
+  return `${base} (${n})`;
+}
+
+/** @param {BitProfile} profile */
+function profileTooBig(profile) {
+  const pts = 'points' in profile ? profile.points : null;
+  if (!Array.isArray(pts)) return false;
+  let m = 0;
+  for (const p of pts) {
+    m = Math.max(m, Math.abs(p.d), Math.abs(p.r));
+  }
+  return m > MAX_USER_BIT_IN;
+}
+
+/**
+ * Parse a DXF into a user bit (plunge first, then flute). Does not add it to the library.
+ * @param {string} filename
+ * @param {string} text
+ * @param {{ existingIds?: Iterable<string>, replaceId?: string }} [opts]
+ * @returns {Bit}
+ */
+export function bitFromDxf(filename, text, opts = {}) {
+  const desired = bitIdFromFilename(filename);
+  const existing = opts.existingIds ?? [];
+  const id = opts.replaceId || uniqueBitId(desired, existing);
+  const tooBigMsg =
+    'That DXF is larger than a router bit (over 8 in). For a spindle outline use Overlay DXF.';
+
+  try {
+    const points = importDxfProfile(text, { dAxis: 'auto' });
+    const profile = { type: /** @type {const} */ ('points'), points };
+    validateBitProfile(profile);
+    if (profileTooBig(profile)) throw new Error(tooBigMsg);
+    return {
+      id,
+      name: id,
+      tool: id,
+      group: 'compound',
+      kind: 'plunge',
+      profile,
+      user: true,
+    };
+  } catch (plungeErr) {
+    try {
+      const profile = importDxfFluteProfile(text);
+      validateBitProfile(profile);
+      if (profileTooBig(profile)) throw new Error(tooBigMsg);
+      return {
+        id,
+        name: id,
+        tool: id,
+        group: 'flute',
+        kind: 'flute',
+        profile,
+        user: true,
+      };
+    } catch (fluteErr) {
+      if (fluteErr instanceof Error && fluteErr.message === tooBigMsg) throw fluteErr;
+      const msg = plungeErr instanceof Error ? plungeErr.message : 'Could not read that DXF as a bit.';
+      throw new Error(msg);
+    }
+  }
+}
+
+/**
+ * Shipped bits first; skip user ids that collide with shipped names.
+ * @param {Bit[]} shipped
+ * @param {Bit[]} userBits
+ * @returns {Bit[]}
+ */
+export function mergeUserBits(shipped, userBits) {
+  const ids = new Set(shipped.map((b) => b.id));
+  /** @type {Bit[]} */
+  const extra = [];
+  for (const b of userBits) {
+    if (!b?.id || ids.has(b.id)) continue;
+    ids.add(b.id);
+    extra.push({ ...b, user: true });
+  }
+  return [...shipped.map((b) => ({ ...b, user: false })), ...extra].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+}
 
 function isFlutePath(path) {
   return /[/\\]Flute[/\\]/i.test(path);

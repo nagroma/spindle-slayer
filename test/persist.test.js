@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { serializeProject, deserializeProject, parseProjectJson, PROJECT_FORMAT, PROJECT_FILE_TYPES, PROJECT_OPEN_PICKER, PROJECT_SAVE_PICKER, writeTextToFileHandle, lompDownloadName } from '../src/persist.js';
+import { serializeProject, deserializeProject, parseProjectJson, parseUserBits, PROJECT_FORMAT, PROJECT_FILE_TYPES, PROJECT_OPEN_PICKER, PROJECT_SAVE_PICKER, writeTextToFileHandle, lompDownloadName } from '../src/persist.js';
 
 const bits = [
   {
@@ -266,6 +266,66 @@ describe('project JSON', () => {
     const data = parseProjectJson(JSON.stringify(JSON.stringify(file)));
     const loaded = deserializeProject(data, bits);
     expect(loaded.model.placements[0].atLength).toBe(4);
+  });
+
+  it('embeds a used custom bit profile so Open works without bits/', () => {
+    const custom = {
+      id: 'tiny-ball',
+      name: 'tiny-ball',
+      tool: 'tiny-ball',
+      group: 'compound',
+      kind: 'plunge',
+      user: true,
+      profile: {
+        type: 'points',
+        points: [
+          { d: 0, r: 0 },
+          { d: 0.25, r: 0.5 },
+          { d: 1, r: 0.5 },
+        ],
+      },
+    };
+    const customModel = {
+      stock: { type: 'square', length: 20, size: 3 },
+      placements: [
+        {
+          id: 'p1',
+          bitId: 'tiny-ball',
+          profile: custom.profile,
+          atLength: 4,
+          circularDistance: 1,
+        },
+      ],
+    };
+    const file = serializeProject(customModel, { customBits: [custom] });
+    expect(file.customBits).toHaveLength(1);
+    expect(file.customBits[0].id).toBe('tiny-ball');
+    expect(file.cuts[0].profile).toBeUndefined();
+
+    const loaded = deserializeProject(file, []);
+    expect(loaded.missing).toEqual([]);
+    expect(loaded.customBits[0].id).toBe('tiny-ball');
+    expect(loaded.model.placements[0].profile).toEqual(custom.profile);
+  });
+
+  it('omits unused custom bits from the project file', () => {
+    const extra = {
+      id: 'spare',
+      name: 'spare',
+      tool: 'spare',
+      group: 'compound',
+      kind: 'plunge',
+      user: true,
+      profile: { type: 'round', r: 0.5 },
+    };
+    const file = serializeProject(model, { customBits: [extra] });
+    expect(file.customBits).toBeUndefined();
+  });
+
+  it('drops invalid stored user bits', () => {
+    expect(parseUserBits([{ id: 'nope' }, null, { id: 'ok', profile: { type: 'round', r: 1 } }]).map((b) => b.id)).toEqual([
+      'ok',
+    ]);
   });
 
   it('round-trips 2D view and 3D camera, and omits them when absent', () => {

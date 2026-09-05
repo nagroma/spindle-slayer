@@ -22,4 +22,5 @@ test('planner links to trace and has overlay controls', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Trace' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Overlay DXF' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add bit' })).toBeVisible();
 });

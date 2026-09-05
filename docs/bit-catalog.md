@@ -4,7 +4,7 @@ Source: Magnate’s “Router Bits For Legacy Ornamental Milling Machinery”
 catalog —
 https://www.magnate.net/v/vspfiles/assets/images/custom/catalogs/Router%20Bits%20-%20Legacy%202024.pdf
 
-**This file is a catalog excerpt, not the live library.** Bits that appear in the planner come from `bits/*.dxf`. Add or remove a DXF there (reload / rebuild) to change what is on screen. Display name today is the filename without `.dxf`.
+**This file is a catalog excerpt, not the live library.** Shipped bits come from `bits/*.dxf`. Add or remove a DXF there (reload / rebuild) to change the built-in set. The live site can also **Add bit** from a DXF in the browser. Display name today is the filename without `.dxf`.
 
 The tables below are Magnate tool numbers and sizes, kept so we can name bits properly later and so we know what the PDF lists as Legacy-related. Compound (two-radii-in-one-plunge) bits are skipped here.
 

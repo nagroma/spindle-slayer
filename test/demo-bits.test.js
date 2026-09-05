@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { loadLibraryBits } from '../src/demo-bits.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { loadLibraryBits, bitFromDxf, bitIdFromFilename, uniqueBitId, mergeUserBits } from '../src/demo-bits.js';
 import { validateBitProfile } from '../src/profile.js';
 
 describe('bits/ DXF library', () => {
@@ -62,5 +64,65 @@ describe('bits/ DXF library', () => {
     expect(maxR).toBeCloseTo(1.51, 1);
     expect(maxR).toBeGreaterThan(0.5);
     expect(maxD).toBeLessThan(6);
+  });
+});
+
+function polylineDxf(verts) {
+  const lines = [
+    '0', 'SECTION', '2', 'HEADER', '9', '$ACADVER', '1', 'AC1009', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'ENTITIES',
+    '0', 'POLYLINE', '8', 'PROFILE', '66', '1',
+  ];
+  for (const [x, y] of verts) {
+    lines.push('0', 'VERTEX', '8', 'PROFILE', '10', String(x), '20', String(y), '30', '0');
+  }
+  lines.push('0', 'SEQEND', '0', 'ENDSEC', '0', 'EOF', '');
+  return lines.join('\n');
+}
+
+describe('runtime DXF bits', () => {
+  it('names a bit from the DXF filename', () => {
+    expect(bitIdFromFilename('C:\\\\Downloads\\\\My Cove.dxf')).toBe('My Cove');
+    expect(bitIdFromFilename('tiny-ball.DXF')).toBe('tiny-ball');
+  });
+
+  it('avoids colliding with an existing id', () => {
+    expect(uniqueBitId('Magnate_7593', ['Magnate_7593'])).toBe('Magnate_7593 (2)');
+    expect(uniqueBitId('cove', ['cove', 'cove (2)'])).toBe('cove (3)');
+  });
+
+  it('parses a plunge half-profile from a DXF', () => {
+    const dxf = readFileSync(fileURLToPath(new URL('./fixtures/tiny-ball.dxf', import.meta.url)), 'utf8');
+    const bit = bitFromDxf('tiny-ball.dxf', dxf, { existingIds: [] });
+    expect(bit.user).toBe(true);
+    expect(bit.kind).toBe('plunge');
+    expect(bit.id).toBe('tiny-ball');
+    expect(bit.profile.type).toBe('points');
+    expect(bit.profile.points[0]).toEqual({ d: 0, r: 0 });
+  });
+
+  it('parses a flute DXF when there is no tip at the origin', () => {
+    const dxf = readFileSync(fileURLToPath(new URL('../bits/Flute/0.5in_Round.dxf', import.meta.url)), 'utf8');
+    const bit = bitFromDxf('0.5in_Round.dxf', dxf, { existingIds: ['0.5in_Round'] });
+    expect(bit.kind).toBe('flute');
+    expect(bit.id).toBe('0.5in_Round (2)');
+    expect(bit.profile.type).toBe('flute');
+  });
+
+  it('rejects a spindle-length overlay DXF', () => {
+    const dxf = polylineDxf([
+      [1.75, 0],
+      [1.75, 29.5],
+    ]);
+    expect(() => bitFromDxf('spindle-trace.dxf', dxf)).toThrow(/Overlay DXF/i);
+  });
+
+  it('does not let a user bit shadow a shipped id', () => {
+    const shipped = [{ id: 'Magnate_7593', name: 'Magnate_7593', tool: 'Magnate_7593', group: 'compound', profile: { type: 'round', r: 1 } }];
+    const user = [{ id: 'Magnate_7593', name: 'fake', tool: 'fake', group: 'compound', profile: { type: 'round', r: 9 }, user: true }];
+    const merged = mergeUserBits(shipped, user);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].user).toBe(false);
+    expect(merged[0].profile).toEqual({ type: 'round', r: 1 });
   });
 });

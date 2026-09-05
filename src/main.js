@@ -1,7 +1,7 @@
 // @ts-check
 // Prism blank + plunge bits + live 2D/3D. 2D camera is independent of bit drag.
 
-import { defaultDemo } from './demo-bits.js';
+import { defaultDemo, bitFromDxf, bitIdFromFilename, mergeUserBits } from './demo-bits.js';
 import { MIN_RADIUS, isRun, isCutHidden, isFlute, isSpiral, enableSpiral, disableSpiral, DEFAULT_FLUTE_INDEX_DEG, DEFAULT_SPIRAL_TRAVEL, DEFAULT_SPIRAL_TURNS } from './geometry.js';
 import { stockMaxRadius, stockFaceRadius } from './stock.js';
 import {
@@ -31,10 +31,15 @@ import {
   parseProjectJson,
   lompDownloadName,
   PROJECT_FILENAME,
+  loadUserBits,
+  saveUserBits,
 } from './persist.js';
 import { importDxfOverlay } from './dxf-profile.js';
 
-const { bits, model: initial } = defaultDemo();
+const { bits: shippedBits, model: initial } = defaultDemo();
+const SHIPPED_IDS = new Set(shippedBits.map((b) => b.id));
+/** @type {import('./demo-bits.js').Bit[]} */
+const bits = mergeUserBits(shippedBits, loadUserBits());
 const savedUi = loadUi();
 const savedSession = loadSession();
 const hydrated = savedSession ? hydrateSession(bits, savedSession) : null;
@@ -201,6 +206,7 @@ const btnZoomIn = document.getElementById('btnZoomIn');
 const btnZoomOut = document.getElementById('btnZoomOut');
 const fileOpen = /** @type {HTMLInputElement} */ (document.getElementById('fileOpen'));
 const fileOverlay = /** @type {HTMLInputElement} */ (document.getElementById('fileOverlay'));
+const fileBit = /** @type {HTMLInputElement} */ (document.getElementById('fileBit'));
 const btnOverlay = document.getElementById('btnOverlay');
 const btnOverlayClear = document.getElementById('btnOverlayClear');
 const overlayOpWrap = document.getElementById('overlayOpWrap');
@@ -299,14 +305,70 @@ meshQualityEl?.addEventListener('input', () => {
   });
 });
 
-paletteEl.innerHTML = bits
-  .map((b) => {
-    const flute = b.kind === 'flute' || b.profile?.type === 'flute';
-    return `<button class="bit${flute ? ' flute' : ''}" type="button" data-bit="${b.id}">${bitIconSVG(b.profile, { size: 28 })}<span class="nm">${b.name}</span></button>`;
-  })
-  .join('');
+/** @param {string} s */
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;');
+}
+
+function persistUserLibrary() {
+  saveUserBits(bits.filter((b) => b.user));
+}
+
+/** @param {import('./demo-bits.js').Bit[]} incoming */
+function upsertUserBits(incoming) {
+  for (const raw of incoming) {
+    if (!raw?.id || SHIPPED_IDS.has(raw.id)) continue;
+    const next = { ...raw, user: true };
+    const i = bits.findIndex((b) => b.id === next.id);
+    if (i >= 0) {
+      bits[i] = next;
+      for (const p of model.placements) {
+        if (p.bitId === next.id) p.profile = next.profile;
+      }
+    } else {
+      bits.push(next);
+    }
+  }
+  bits.sort((a, b) => a.name.localeCompare(b.name));
+  persistUserLibrary();
+  renderPalette();
+}
+
+function renderPalette() {
+  if (!paletteEl) return;
+  const chips = bits
+    .map((b) => {
+      const flute = b.kind === 'flute' || b.profile?.type === 'flute';
+      const id = escapeHtml(b.id);
+      const name = escapeHtml(b.name);
+      const btn = `<button class="bit${flute ? ' flute' : ''}${b.user ? ' user' : ''}" type="button" data-bit="${id}">${bitIconSVG(b.profile, { size: 28 })}<span class="nm">${name}</span></button>`;
+      if (!b.user) return btn;
+      return `<span class="bit-chip">${btn}<button class="bit-remove" type="button" data-remove-bit="${id}" title="Remove from this browser">×</button></span>`;
+    })
+    .join('');
+  paletteEl.innerHTML =
+    chips +
+    '<button class="ghost" id="btnAddBit" type="button" title="Load a bit DXF into this browser. Shipped bits stay in the app.">Add bit</button>';
+  document.getElementById('btnAddBit')?.addEventListener('click', () => {
+    if (!fileBit) return;
+    fileBit.value = '';
+    fileBit.click();
+  });
+}
+
+renderPalette();
 
 paletteEl.addEventListener('click', (e) => {
+  const removeBtn = /** @type {HTMLElement} */ (e.target).closest('[data-remove-bit]');
+  if (removeBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    removeUserBit(removeBtn.getAttribute('data-remove-bit'));
+    return;
+  }
   const btn = /** @type {HTMLElement} */ (e.target).closest('[data-bit]');
   if (!btn) return;
   const bit = bits.find((b) => b.id === btn.getAttribute('data-bit'));
@@ -404,6 +466,54 @@ if (fileOverlay) {
       window.alert(err instanceof Error ? err.message : 'Could not read that DXF as a profile overlay.');
     } finally {
       fileOverlay.value = '';
+    }
+  };
+}
+
+/** @param {string} filename @param {string} text */
+function addBitFromDxf(filename, text) {
+  const desired = bitIdFromFilename(filename);
+  const existingUser = bits.find((b) => b.user && b.id === desired);
+  const bit = bitFromDxf(filename, text, {
+    existingIds: bits.map((b) => b.id),
+    replaceId: existingUser ? existingUser.id : undefined,
+  });
+  upsertUserBits([bit]);
+}
+
+/** @param {string | null} id */
+function removeUserBit(id) {
+  if (!id) return;
+  const bit = bits.find((b) => b.id === id);
+  if (!bit?.user) {
+    window.alert('Shipped bits stay in the library. Only bits you added can be removed.');
+    return;
+  }
+  const used = model.placements.filter((p) => p.bitId === id).length;
+  if (used) {
+    window.alert(
+      `${bit.name} is used on ${used} cut${used === 1 ? '' : 's'}. Remove those cuts first.`
+    );
+    return;
+  }
+  const i = bits.findIndex((b) => b.id === id);
+  if (i < 0) return;
+  bits.splice(i, 1);
+  persistUserLibrary();
+  renderPalette();
+}
+
+if (fileBit) {
+  fileBit.onchange = async () => {
+    const file = fileBit.files?.[0];
+    if (!file) return;
+    try {
+      const text = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+      addBitFromDxf(file.name, text);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not read that DXF as a bit.');
+    } finally {
+      fileBit.value = '';
     }
   };
 }
@@ -716,6 +826,7 @@ function projectSnapshotJson() {
       sideView,
       camera3d: view3d.getCamera(),
       overlay,
+      customBits: bits.filter((b) => b.user),
     }),
     null,
     2
@@ -765,6 +876,7 @@ function applyProject(data, filename) {
     window.alert('That file is not a spindle project.');
     return;
   }
+  if (loaded.customBits.length) upsertUserBits(loaded.customBits);
   dragBit = null;
   pan = null;
   const active = document.activeElement;
@@ -779,7 +891,7 @@ function applyProject(data, filename) {
     return Number.isFinite(n) ? Math.max(m, n) : m;
   }, 1);
   if (loaded.missing.length) {
-    window.alert(`Missing bits (not in bits/): ${loaded.missing.join(', ')}`);
+    window.alert(`Missing bits (not in this library): ${loaded.missing.join(', ')}`);
   }
   setProjectLabel(filename);
   sideView = loaded.sideView;

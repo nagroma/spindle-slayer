@@ -24,3 +24,12 @@ test('can move the last cut to first', async ({ page }) => {
   await expect(items.nth(0).locator('.placed-num')).toHaveText('1');
   await expect(items.nth(1).locator('.placed-main')).toContainText('Magnate_7593');
 });
+
+test('can add and remove a user bit from a DXF', async ({ page }) => {
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/');
+  await page.locator('#fileBit').setInputFiles('test/fixtures/tiny-ball.dxf');
+  await expect(page.locator('#bitPalette [data-bit="tiny-ball"]')).toBeVisible();
+  await page.locator('#bitPalette [data-remove-bit="tiny-ball"]').click();
+  await expect(page.locator('#bitPalette [data-bit="tiny-ball"]')).toHaveCount(0);
+});

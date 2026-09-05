@@ -10,12 +10,12 @@ You need a modern browser. **Save** uses the browser's Save dialog so you can na
 
 1. Open **https://spindle-slayer.vercel.app** (Chrome or Edge). During development, `npm run dev` is http://localhost:5173/.
 2. Set the blank: **round**, **square**, or **hex** (hex size is across the flats). Length and size are in inches.
-3. Click a bit to add a cut. Drag it for a rough placement; type **From headstock** and **Diameter at tip** for the exact numbers.
+3. Click a bit to add a cut. Drag it for a rough placement; type **From headstock** and **Diameter at tip** for the exact numbers. **Add bit** loads a DXF from disk into this browser (that is how a file in Downloads becomes a palette button on the live site). A dashed chip with × is one you added; × removes it from this browser after you remove any cuts that use it. Shipped bits stay.
 4. Optional: check **Run / taper** and set the stop (end headstock and end diameter). Check **Spiral / pineapple** to gear rotation to travel (ratio, starts, start angle, turn direction). A top-mounted bit such as Magnate 7554 wraps a barley twist (defaults to both ways); a flute bit wraps a pineapple. Flute bits (green in the picker) use the same run fields as the bearing path; without spiral, set **Index (deg)** for how often the groove repeats around the piece.
 5. Reorder cuts with ▲▼ or by dragging the number. Hide a cut with the eye icon under ×. Remove a cut with ×. Undo / Redo sit next to Remove cut.
 6. **Save** opens the browser Save dialog. Name the file and pick a folder. **Open** defaults to `.lomp`; pick All files for an older `.json` or `.txt`.
 
-**Trace** (header link) is a second page: click a photo silhouette, fit lines/arcs/splines, export a DXF. In the planner 2D pane, **Overlay DXF** loads that file as a target outline behind the remaining wood. Fade it with the slider when you do not want it in the way.
+**Trace** (header link) is a second page: click a photo silhouette, fit lines/arcs/splines, export a DXF. A **spindle** DXF loads with **Overlay DXF** in the planner 2D pane (reference only). A **bit** DXF loads with **Add bit**.
 
 A refresh keeps your last session in the browser. Named designs live in files you Save, so you can have more than one.
 
@@ -58,9 +58,9 @@ npm run build    # static site in dist/
 
 `dist/` after a build is the whole app. Copy that folder and open `dist/index.html`. No server and no internet after that.
 
-**Trace** (second page): http://localhost:5173/trace.html. Load the exported DXF in the planner with **Overlay DXF**.
+**Trace** (second page): http://localhost:5173/trace.html. Load a spindle DXF with **Overlay DXF**, or a bit DXF with **Add bit**.
 
-Bits on screen come from `bits/*.dxf` (inches, tip at 0,0). Add or remove a DXF and reload (rebuild for a shipped `dist/`).
+Shipped bits on screen come from `bits/*.dxf` (inches, tip at 0,0). Add or remove a DXF there and reload (rebuild for a shipped `dist/`). Extra bits on the live site are **Add bit** in the browser.
 
 ## Other docs
 
