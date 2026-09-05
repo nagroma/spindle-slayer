@@ -8,6 +8,8 @@ import {
   endCenter,
   pixelToProfile,
   profileToPixel,
+  bitOriginAxis,
+  startProfileAtTip,
 } from './coords.js';
 import {
   applySmoothJoins,
@@ -37,6 +39,8 @@ const stepEl = document.getElementById('step');
 const segsEl = document.getElementById('segs');
 const previewEl = /** @type {SVGSVGElement} */ (document.getElementById('preview'));
 const modeEl = /** @type {HTMLSelectElement} */ (document.getElementById('mode'));
+const tipTowardEl = /** @type {HTMLSelectElement} */ (document.getElementById('tipToward'));
+const tipTowardWrap = document.getElementById('tipTowardWrap');
 const toolEl = /** @type {HTMLSelectElement} */ (document.getElementById('tool'));
 const knownInchesEl = /** @type {HTMLInputElement} */ (document.getElementById('knownInches'));
 const axisIsLengthEl = /** @type {HTMLInputElement} */ (document.getElementById('axisIsLength'));
@@ -79,6 +83,17 @@ let redoStack = [];
 
 function mode() {
   return modeEl.value === 'bit' ? 'bit' : 'spindle';
+}
+
+/** @returns {'auto' | 'left' | 'right' | 'top' | 'bottom'} */
+function tipToward() {
+  const v = tipTowardEl?.value;
+  if (v === 'left' || v === 'right' || v === 'top' || v === 'bottom' || v === 'auto') return v;
+  return mode() === 'bit' ? 'right' : 'auto';
+}
+
+function syncTipTowardUi() {
+  if (tipTowardWrap) tipTowardWrap.hidden = mode() !== 'bit';
 }
 
 function tool() {
@@ -181,7 +196,7 @@ function stepText() {
       return '<strong>Load a picture</strong> or open a saved session. A side view works better than a 3/4 shot.';
     case 'topExt':
       return bit
-        ? '<strong>Click the tip</strong> — the high spot, not the center. We will find the center from the sides next.'
+        ? '<strong>Click the tip end</strong> of the bit (cutting end), then its two sides. Catalog photos are usually shank on the left, tip on the right — set <em>Tip is toward</em> to match.'
         : '<strong>Click the high spot</strong> of the headstock end (the top of the wood). Not the center — just the highest point.';
     case 'topSide1':
       return '<strong>Click one side</strong> of that end (left or right edge). It does not have to be at the same height as the high spot.';
@@ -189,7 +204,7 @@ function stepText() {
       return '<strong>Click the other side</strong> of that end. We compute the top-center from those three clicks.';
     case 'botExt':
       return bit
-        ? '<strong>Click the other end</strong> of the bit along the axis (low spot of that end).'
+        ? '<strong>Click the shank end</strong> of the bit (the other end along the axis), then its two sides.'
         : '<strong>Click the low spot</strong> of the foot (the bottom of the wood). Not the center.';
     case 'botSide1':
       return '<strong>Click one side</strong> of that end.';
@@ -216,9 +231,11 @@ function stepText() {
 }
 
 function currentScale() {
-  const origin = topCenter();
-  const axis = botCenter();
-  if (!origin || !axis) return null;
+  const first = topCenter();
+  const second = botCenter();
+  if (!first || !second) return null;
+  const { origin, axis } =
+    mode() === 'bit' ? bitOriginAxis(first, second, tipToward()) : { origin: first, axis: second };
   const inches = knownInches();
   if (axisIsLengthEl.checked) return axisScaleFromLength(origin, axis, inches);
   if (scaleA && scaleB) return axisScaleFromSpan(origin, axis, scaleA, scaleB, inches);
@@ -258,10 +275,16 @@ function fitNow() {
   let pts = traced.points;
   let breaks = traced.breaks;
   let smoothBreaks = traced.smoothBreaks;
-  if (mode() === 'bit' && pts.length && (Math.abs(pts[0].d) > 0.02 || Math.abs(pts[0].r) > 0.02)) {
-    pts = [{ d: 0, r: 0 }, ...pts];
-    breaks = breaks.map((i) => i + 1);
-    smoothBreaks = smoothBreaks.map((i) => i + 1);
+  if (mode() === 'bit') {
+    const started = startProfileAtTip(pts, breaks, smoothBreaks);
+    pts = started.points;
+    breaks = started.breaks;
+    smoothBreaks = started.smoothBreaks;
+    if (pts.length && (Math.abs(pts[0].d) > 0.02 || Math.abs(pts[0].r) > 0.02)) {
+      pts = [{ d: 0, r: 0 }, ...pts];
+      breaks = breaks.map((i) => i + 1);
+      smoothBreaks = smoothBreaks.map((i) => i + 1);
+    }
   }
   segs = fitSegments(pts, { breaks, smoothBreaks });
   segs = applyStoredTypes(segs);
@@ -326,8 +349,12 @@ function draw() {
     ctx.globalAlpha = 1;
   }
   drawEndMarks();
-  const origin = topCenter();
-  const axis = botCenter();
+  const first = topCenter();
+  const second = botCenter();
+  const pair =
+    first && second && mode() === 'bit' ? bitOriginAxis(first, second, tipToward()) : { origin: first, axis: second };
+  const origin = pair.origin;
+  const axis = pair.axis;
   if (origin && axis) {
     const a = imgToCanvas(origin);
     const b = imgToCanvas(axis);
@@ -609,6 +636,7 @@ function sessionState() {
     axisIsLength: axisIsLengthEl.checked,
     knownRadii: knownRadiiEl.value,
     photoOpacity: Number(photoOpacityEl?.value) || 80,
+    tipToward: mode() === 'bit' ? tipToward() : 'auto',
     ends,
     scaleA,
     scaleB,
@@ -621,6 +649,11 @@ function sessionState() {
 /** @param {import('./session.js').TraceSession} data */
 function applySession(data) {
   modeEl.value = data.mode === 'bit' ? 'bit' : 'spindle';
+  if (tipTowardEl) {
+    const t = data.tipToward;
+    tipTowardEl.value = t === 'left' || t === 'right' || t === 'top' || t === 'bottom' || t === 'auto' ? t : data.mode === 'bit' ? 'right' : 'auto';
+  }
+  syncTipTowardUi();
   if (data.knownInches) knownInchesEl.value = String(data.knownInches);
   axisIsLengthEl.checked = data.axisIsLength !== false;
   updateLengthCaption();
@@ -1019,7 +1052,7 @@ btnRedo?.addEventListener('click', () => redo());
 
 document.getElementById('btnFinish')?.addEventListener('click', () => {
   if (!currentScale() || trace.length < 3) {
-    window.alert('Mark both ends (high/low + two sides each), then click at least three points along the edge.');
+    window.alert('Mark both ends (each end: extreme + two sides), then click at least three points along the edge.');
     return;
   }
   pushHistory();
@@ -1034,6 +1067,8 @@ document.getElementById('btnDxf')?.addEventListener('click', () => {
   }
   const base = (imageName || (mode() === 'bit' ? 'bit-trace' : 'spindle-trace')).replace(/\.[^.]+$/, '');
   if (mode() === 'bit') {
+    // Photo stays tip-on-the-right. Sampled polyline is tip at (0,0), X = radius,
+    // Y along the bit — ARC entities can be stored start-at-the-far-end.
     download(`${base}.dxf`, sampledBitDxf(sampleSegments(segs)));
   } else {
     download(`${base}.dxf`, segsToDxf(segs));
@@ -1114,9 +1149,15 @@ function updateLengthCaption() {
 
 modeEl.addEventListener('change', () => {
   updateLengthCaption();
+  syncTipTowardUi();
   if (mode() === 'bit' && knownInchesEl.value === '29.5') knownInchesEl.value = '1';
   if (mode() === 'spindle' && knownInchesEl.value === '1') knownInchesEl.value = '29.5';
   segs = [];
+  draw();
+});
+
+tipTowardEl?.addEventListener('change', () => {
+  if (currentScale() && trace.length >= 2) fitNow();
   draw();
 });
 
@@ -1138,5 +1179,6 @@ photoOpacityEl?.addEventListener('input', () => draw());
 
 window.addEventListener('resize', resize);
 updateLengthCaption();
+syncTipTowardUi();
 if (stepEl) stepEl.innerHTML = stepText();
 resize();

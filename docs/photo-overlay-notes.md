@@ -44,3 +44,5 @@ A later in-app scaler (medium) would still need: rotate to vertical, pick top/fo
 ## Traced DXF overlay (in the planner)
 
 The 2D planner overlay is not this PNG. Trace a silhouette on `/trace.html`, Save DXF, then **Overlay DXF** in the planner 2D pane. That file is already in inches with headstock at 0; Fade controls how strong it is. It does not cut wood.
+
+Bit traces are different: **Tip is toward** (left / right / top / bottom) says which side of the photo is the cutting tip. The photo stays that way while you trace. Save DXF writes planner convention (tip at the origin, X = radius, Y along the bit), then **Add bit**. Catalog shots are usually tip on the right.

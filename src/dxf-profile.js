@@ -351,8 +351,7 @@ function clampRadius(points) {
 /**
  * Parse a DXF whose sketched (x, y) is the bit half-profile, tip at (0,0).
  * dAxis: 'x' (default, x along the bit), 'y' (y along the bit), or 'auto'
- * (pick the mapping where the first step off the tip is mostly radius —
- * that is the usual round/ball cutting edge).
+ * (`auto` is the bits/*.dxf / Trace convention: Y along the bit, X as radius).
  * @param {string} dxfText
  * @param {{ dAxis?: 'x' | 'y' | 'auto' }} [opts]
  * @returns {ProfilePoint[]}
@@ -426,15 +425,11 @@ export function importDxfFluteProfile(dxfText) {
 function orientProfile(points, dAxis) {
   let axis = dAxis;
   if (axis === 'auto') {
-    let i = 1;
-    // Ignore tessellation wiggles at the origin (Magnate 7554's second
-    // vertex is ~0.002″ along Y). Those made auto-detect treat Y as radius
-    // and stretch a wide ogee along the spindle.
-    while (i < points.length && Math.hypot(points[i].d, points[i].r) < 0.01) i++;
-    const p = points[i] ?? points[1];
-    // If the first step off the tip is mostly in X, X is radius (round cutting
-    // edge) and Y is the bit axis.
-    axis = p && Math.abs(p.d) >= Math.abs(p.r) ? 'y' : 'x';
+    // bits/*.dxf and Trace write X = radius, Y = along the axis, tip at (0,0).
+    // An older heuristic picked whichever axis grew first as radius so a ball
+    // would map correctly. A pointed roundover's first motion is along the
+    // bit, so that swapped d/r into a half-disk.
+    axis = 'y';
   }
   if (axis === 'y') {
     return points.map((p) => ({ d: p.r, r: p.d }));

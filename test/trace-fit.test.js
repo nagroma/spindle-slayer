@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
-import { axisScaleFromLength, pixelToProfile, traceToProfile, endCenter, snapVerticalProfile } from '../src/trace/coords.js';
+import { axisScaleFromLength, pixelToProfile, traceToProfile, endCenter, snapVerticalProfile, bitOriginAxis, startProfileAtTip } from '../src/trace/coords.js';
 import {
   fitCircle,
   fitLineRms,
@@ -72,6 +72,56 @@ describe('pixel to profile', () => {
     ]);
     expect(points).toHaveLength(5);
     expect(breaks).toEqual([2]);
+  });
+});
+
+describe('bit photo tip toward', () => {
+  it('keeps click order when auto', () => {
+    const a = { x: 10, y: 50 };
+    const b = { x: 200, y: 50 };
+    const got = bitOriginAxis(a, b, 'auto');
+    expect(got.origin).toEqual(a);
+    expect(got.axis).toEqual(b);
+  });
+
+  it('uses the right-hand end as the tip even if it was marked second', () => {
+    const shank = { x: 20, y: 40 };
+    const tip = { x: 180, y: 42 };
+    const got = bitOriginAxis(shank, tip, 'right');
+    expect(got.origin).toEqual(tip);
+    expect(got.axis).toEqual(shank);
+  });
+
+  it('uses the top end as the tip for a standing bit photo', () => {
+    const tip = { x: 50, y: 10 };
+    const shank = { x: 52, y: 200 };
+    const got = bitOriginAxis(shank, tip, 'top');
+    expect(got.origin).toEqual(tip);
+    expect(got.axis).toEqual(shank);
+  });
+
+  it('reverses a shank-first polyline so d starts at the tip', () => {
+    const pts = [
+      { d: 1, r: 0.3 },
+      { d: 0.5, r: 0.5 },
+      { d: 0.05, r: 0.1 },
+    ];
+    const got = startProfileAtTip(pts, [1], []);
+    expect(got.points[0].d).toBeCloseTo(0.05, 6);
+    expect(got.points[got.points.length - 1].d).toBeCloseTo(1, 6);
+    expect(got.breaks).toEqual([1]);
+  });
+
+  it('maps a tip-on-the-right photo so d grows toward the shank', () => {
+    const shank = { x: 0, y: 50 };
+    const tip = { x: 100, y: 50 };
+    const { origin, axis } = bitOriginAxis(shank, tip, 'right');
+    const scale = axisScaleFromLength(origin, axis, 1);
+    expect(scale).not.toBeNull();
+    const atTip = pixelToProfile(scale, tip);
+    const atShank = pixelToProfile(scale, shank);
+    expect(atTip.d).toBeCloseTo(0, 5);
+    expect(atShank.d).toBeCloseTo(1, 5);
   });
 });
 
@@ -174,10 +224,28 @@ describe('DXF export', () => {
       pts.push({ d: 0.5 * t, r: Math.sqrt(Math.max(0, 1 * 0.5 * t - (0.5 * t) ** 2)) });
     }
     const dxf = sampledBitDxf(pts);
-    const got = importDxfProfile(dxf, { dAxis: 'auto' });
+    const got = importDxfProfile(dxf, { dAxis: 'y' });
     expect(got[0]).toEqual({ d: 0, r: 0 });
     expect(got[got.length - 1].d).toBeCloseTo(pts[pts.length - 1].d, 4);
     expect(got[got.length - 1].r).toBeCloseTo(pts[pts.length - 1].r, 4);
+  });
+
+  it('round-trips a pointed 3/4″ roundover through sampledBitDxf', () => {
+    const pts = [
+      { d: 0, r: 0 },
+      { d: 0.066826, r: 0.011617 },
+      { d: 0.669998, r: 0.727319 },
+      { d: 0.971246, r: 0.728272 },
+    ];
+    const dxf = sampledBitDxf(pts);
+    const got = importDxfProfile(dxf, { dAxis: 'y' });
+    expect(got[0]).toEqual({ d: 0, r: 0 });
+    const first = got.find((p) => Math.hypot(p.d, p.r) > 0.02);
+    expect(first.d).toBeGreaterThan(first.r);
+    const maxD = Math.max(...got.map((p) => p.d));
+    const maxR = Math.max(...got.map((p) => p.r));
+    expect(maxD).toBeCloseTo(0.971, 2);
+    expect(maxR).toBeCloseTo(0.728, 2);
   });
 
   it('writes ARC entities for a snapped curve', () => {
@@ -347,6 +415,25 @@ describe('session and node edit', () => {
     const got = parseSession(json);
     expect(got.imageName).toBe('leg.jpg');
     expect(got.trace[0].smooth).toBe(true);
+  });
+
+  it('round-trips bit tipToward', () => {
+    const json = serializeSession({
+      imageName: '7517.png',
+      imageData: '',
+      mode: 'bit',
+      knownInches: 1,
+      axisIsLength: true,
+      knownRadii: '0.75',
+      tipToward: 'right',
+      ends: [],
+      scaleA: null,
+      scaleB: null,
+      trace: [],
+      tool: 'place',
+      segs: [],
+    });
+    expect(parseSession(json).tipToward).toBe('right');
   });
 
   it('inserts on a span and cycles join type', () => {

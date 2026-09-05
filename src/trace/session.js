@@ -20,6 +20,7 @@ export const TRACE_VERSION = 1;
  *   axisIsLength: boolean,
  *   knownRadii: string,
  *   photoOpacity?: number,
+ *   tipToward?: 'auto' | 'left' | 'right' | 'top' | 'bottom',
  *   ends: Pixel[],
  *   scaleA: Pixel | null,
  *   scaleB: Pixel | null,

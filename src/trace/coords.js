@@ -146,6 +146,50 @@ export function traceToProfile(scale, pixels) {
 }
 
 /**
+ * For a bit photo, d = 0 is the cutting tip. Catalog shots are usually
+ * shank-left / tip-right; a standing shot may put the tip at the top.
+ * `auto` keeps the first marked end as the tip (click order).
+ *
+ * @param {{ x: number, y: number }} firstEnd
+ * @param {{ x: number, y: number }} secondEnd
+ * @param {'auto' | 'left' | 'right' | 'top' | 'bottom'} [tipToward]
+ * @returns {{ origin: { x: number, y: number }, axis: { x: number, y: number } }}
+ */
+export function bitOriginAxis(firstEnd, secondEnd, tipToward = 'auto') {
+  if (tipToward === 'auto' || !tipToward) return { origin: firstEnd, axis: secondEnd };
+  const score = (p) => {
+    if (tipToward === 'right') return p.x;
+    if (tipToward === 'left') return -p.x;
+    if (tipToward === 'bottom') return p.y;
+    return -p.y;
+  };
+  return score(firstEnd) >= score(secondEnd)
+    ? { origin: firstEnd, axis: secondEnd }
+    : { origin: secondEnd, axis: firstEnd };
+}
+
+/**
+ * Start the polyline at the cutting tip (smaller d). Tracing shank→tip
+ * otherwise prepends (0,0) onto the shank and the planner shows a blob.
+ * @param {ProfilePt[]} points
+ * @param {number[]} [breaks]
+ * @param {number[]} [smoothBreaks]
+ */
+export function startProfileAtTip(points, breaks = [], smoothBreaks = []) {
+  if (points.length < 2) return { points, breaks, smoothBreaks };
+  if (points[0].d <= points[points.length - 1].d) return { points, breaks, smoothBreaks };
+  const n = points.length;
+  const map = (/** @type {number} */ i) => n - 1 - i;
+  const keep = (/** @type {number[]} */ arr) =>
+    [...new Set(arr.map(map).filter((i) => i > 0 && i < n - 1))].sort((a, b) => a - b);
+  return {
+    points: points.map((p) => ({ ...p })).reverse(),
+    breaks: keep(breaks),
+    smoothBreaks: keep(smoothBreaks),
+  };
+}
+
+/**
  * Consecutive clicks that are almost the same radius (nearly vertical on a
  * standing spindle) share one r. A roundover's tangent points should.
  * @param {ProfilePt[]} points

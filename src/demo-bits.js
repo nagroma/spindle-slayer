@@ -65,7 +65,7 @@ export function bitFromDxf(filename, text, opts = {}) {
     'That DXF is larger than a router bit (over 8 in). For a spindle outline use Overlay DXF.';
 
   try {
-    const points = importDxfProfile(text, { dAxis: 'auto' });
+    const points = importDxfProfile(text, { dAxis: 'y' });
     const profile = { type: /** @type {const} */ ('points'), points };
     validateBitProfile(profile);
     if (profileTooBig(profile)) throw new Error(tooBigMsg);
@@ -144,7 +144,7 @@ export function loadLibraryBits() {
       });
       continue;
     }
-    const points = importDxfProfile(text, { dAxis: 'auto' });
+    const points = importDxfProfile(text, { dAxis: 'y' });
     const profile = { type: 'points', points };
     validateBitProfile(profile);
     bits.push({

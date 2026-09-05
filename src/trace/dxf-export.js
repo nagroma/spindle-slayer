@@ -1,7 +1,7 @@
 // @ts-check
 // Write a tiny R12 DXF: LINE + ARC in inches.
-// Sketch plane: X = radius, Y = along axis (headstock / bit tip at 0).
-// That matches bits/*.dxf so importDxfProfile({ dAxis: 'auto' }) can read a bit.
+// Sketch plane: X = radius, Y = along axis (tip at the origin, rest of the bit +Y).
+// That matches bits/*.dxf so importDxfProfile({ dAxis: 'y' }) can read a bit.
 
 import { sampleSplineSeg } from './fit.js';
 

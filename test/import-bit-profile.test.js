@@ -60,6 +60,22 @@ describe('importDxfProfile auto axis', () => {
     expect(maxR).toBeCloseTo(1.508, 2);
     expect(maxD).toBeCloseTo(0.753, 2);
   });
+
+  it('keeps a pointed 3/4″ roundover along the bit, not a ball', () => {
+    const dxf = polylineDxf([
+      [0, 0],
+      [0.011617, 0.066826],
+      [0.727319, 0.669998],
+      [0.728272, 0.971246],
+    ]);
+    const pts = importDxfProfile(dxf, { dAxis: 'auto' });
+    const first = pts.find((p) => Math.hypot(p.d, p.r) > 0.01);
+    expect(first.d).toBeGreaterThan(first.r);
+    const maxD = Math.max(...pts.map((p) => p.d));
+    const maxR = Math.max(...pts.map((p) => p.r));
+    expect(maxD).toBeCloseTo(0.971, 2);
+    expect(maxR).toBeCloseTo(0.728, 2);
+  });
 });
 
 describe('importDxfOverlay', () => {

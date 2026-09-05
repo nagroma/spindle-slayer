@@ -15,7 +15,7 @@ You need a modern browser. **Save** uses the browser's Save dialog so you can na
 5. Reorder cuts with ▲▼ or by dragging the number. Hide a cut with the eye icon under ×. Remove a cut with ×. Undo / Redo sit next to Remove cut.
 6. **Save** opens the browser Save dialog. Name the file and pick a folder. **Open** defaults to `.lomp`; pick All files for an older `.json` or `.txt`.
 
-**Trace** (header link) is a second page: click a photo silhouette, fit lines/arcs/splines, export a DXF. A **spindle** DXF loads with **Overlay DXF** in the planner 2D pane (reference only). A **bit** DXF loads with **Add bit**.
+**Trace** (header link) is a second page: click a photo silhouette, fit lines/arcs/splines, export a DXF. A **spindle** DXF loads with **Overlay DXF** in the planner 2D pane (reference only). A **bit** DXF loads with **Add bit**. Bit catalog photos are usually shank-left / tip-right: set **Tip is toward** to that side of the picture so the DXF matches the planner.
 
 A refresh keeps your last session in the browser. Named designs live in files you Save, so you can have more than one.
 

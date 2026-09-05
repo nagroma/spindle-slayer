@@ -8,8 +8,10 @@ describe('bits/ DXF library', () => {
   const bits = loadLibraryBits();
 
   it('loads Magnate, endmill, and flute DXFs as named bits', () => {
-    const ids = bits.map((b) => b.id).sort();
-    expect(ids).toEqual(['0.5in_Round', 'Endmill_1_2', 'Magnate 7554', 'Magnate_7533', 'Magnate_7593', 'Magnate_803']);
+    const ids = bits.map((b) => b.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(['0.5in_Round', 'Endmill_1_2', 'Magnate 7554', 'Magnate_7533', 'Magnate_7593', 'Magnate_803'])
+    );
   });
 
   it('names bits from the filename (no extension)', () => {
@@ -56,6 +58,19 @@ describe('bits/ DXF library', () => {
     expect(maxR).toBeCloseTo(1.5, 1);
   });
 
+  it('Magnate 7517 is a pointed 3/4″ roundover, not a half-disk', () => {
+    const bit = bits.find((b) => b.id === 'Magnate 7517');
+    expect(bit).toBeDefined();
+    const pts = bit.profile.points;
+    const first = pts.find((p) => Math.hypot(p.d, p.r) > 0.01);
+    expect(first.d).toBeGreaterThan(first.r);
+    const maxD = Math.max(...pts.map((p) => p.d));
+    const maxR = Math.max(...pts.map((p) => p.r));
+    expect(maxD).toBeGreaterThan(0.9);
+    expect(maxR).toBeGreaterThan(0.7);
+    expect(maxR).toBeLessThan(0.8);
+  });
+
   it('Magnate 7554 keeps X as radius (round cutting edge), not a spindle-length stretch', () => {
     const bit = bits.find((b) => b.id === 'Magnate 7554');
     expect(bit).toBeDefined();
@@ -99,6 +114,15 @@ describe('runtime DXF bits', () => {
     expect(bit.id).toBe('tiny-ball');
     expect(bit.profile.type).toBe('points');
     expect(bit.profile.points[0]).toEqual({ d: 0, r: 0 });
+  });
+
+  it('Add bit keeps Magnate 7517 as a point, not a ball', () => {
+    const dxf = readFileSync(fileURLToPath(new URL('../bits/Magnate 7517.dxf', import.meta.url)), 'utf8');
+    const bit = bitFromDxf('Magnate 7517.dxf', dxf, { existingIds: [] });
+    const pts = bit.profile.points;
+    const first = pts.find((p) => Math.hypot(p.d, p.r) > 0.01);
+    expect(first.d).toBeGreaterThan(first.r);
+    expect(Math.max(...pts.map((p) => p.r))).toBeLessThan(0.8);
   });
 
   it('parses a flute DXF when there is no tip at the origin', () => {

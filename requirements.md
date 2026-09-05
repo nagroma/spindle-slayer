@@ -65,7 +65,7 @@ These are “this seems like a good direction right now,” not frozen.
 ### Bits pipeline
 
 - Today each `bits/*.dxf` is imported when the app loads (Vite glob in dev/build). Reloading the app (and rebuilding for a shipped `dist/`) is how a new **shipped** file appears. **Add bit** loads extra DXFs into this browser without a rebuild.
-- DXF sketches in `bits/` use **Y along the bit axis** and **X as radius**; import **auto-detects** that. The older millimetre reference DXF in `reference/` is a different convention.
+- DXF sketches in `bits/` (and Trace **Save DXF** in bit mode) use **Y along the bit axis** and **X as radius**, tip at (0,0). Import uses that mapping (`dAxis: 'y'`). The older millimetre reference DXF in `reference/` is a different convention (X along the bit).
 - A processed on-disk cache of profiles, picking a subset of bits to show, and a full bit-management UI are medium (favorites, hide, names that are not filenames). Until then: `bits/` is the shipped source of truth. Display name stays the filename. User-loaded DXFs are extra, per browser.
 - JSON for projects, not YAML.
 
@@ -96,7 +96,7 @@ These are “this seems like a good direction right now,” not frozen.
 ### Photo overlay and tracing (high)
 
 - Recreating a spindle from a picture is the real need (not a pretty JPEG behind the stock).
-- **Interactive tracer** is a second page (`trace.html`): click the edge, fit lines/arcs/splines, snap a known radius, merge pieces into one bit, export DXF. Photo opacity is adjustable. Sessions save as `.ltrace`. Same loop for **bit** half-profiles. Stay on bit-matching (join / type / known radius), not CAD handles. Later: constrain each segment to a real bit half-profile (a cut from the side), and treat fit direction per segment rather than as a whole-trace toggle.
+- **Interactive tracer** is a second page (`trace.html`): click the edge, fit lines/arcs/splines, snap a known radius, merge pieces into one bit, export DXF. Photo opacity is adjustable. Sessions save as `.ltrace`. Same loop for **bit** half-profiles. Bit photos can lie any way; **Tip is toward** (left / right / top / bottom) marks which side of the picture the cutting tip is on so the saved DXF has the tip at (0,0) for the planner. Stay on bit-matching (join / type / known radius), not CAD handles. Later: constrain each segment to a real bit half-profile (a cut from the side), and treat fit direction per segment rather than as a whole-trace toggle.
 - **2D overlay**: load a traced spindle DXF behind the planner profile (inches, headstock at the top). It stays visible while placing bits. An opacity slider fades it. The overlay is a reference only — it does not cut wood. It is stored in the session and in `.lomp`. A raw photo behind the 2D stock is still possible later. Phone photos are perspective; do not squash them into the stock rectangle.
 
 - While building photo tools, keep short notes: `docs/photo-overlay-notes.md`.
